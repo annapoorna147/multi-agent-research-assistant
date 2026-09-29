@@ -1,15 +1,17 @@
+from agents.analyst import AnalystAgent
 from tools.source_extractor import SourceExtractor
 from tools.web_search import search_web
 
 
 class ResearchPipeline:
-    """Search for sources and extract their readable content."""
+    """Search for sources, extract content, and analyze findings."""
 
     def __init__(self):
         self.extractor = SourceExtractor()
+        self.analyst = AnalystAgent()
 
     def research(self, query, max_results=5):
-        """Search the web and extract content from the results."""
+        """Search, extract, and analyze research sources."""
 
         search_results = search_web(query, max_results)
 
@@ -28,4 +30,10 @@ class ResearchPipeline:
                 }
             )
 
-        return sources
+        analysis = self.analyst.analyze(sources)
+
+        return {
+            "query": query,
+            "sources": sources,
+            "analysis": analysis,
+        }
