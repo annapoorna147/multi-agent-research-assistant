@@ -1,3 +1,4 @@
+from agents.synthesizer import SynthesizerAgent
 from tools.research_pipeline import ResearchPipeline
 
 
@@ -6,6 +7,7 @@ class OrchestratorAgent:
 
     def __init__(self):
         self.pipeline = ResearchPipeline()
+        self.synthesizer = SynthesizerAgent()
 
     def create_plan(self, question):
         """Create a simple research workflow plan."""
@@ -18,11 +20,12 @@ class OrchestratorAgent:
                 "Extract readable source content",
                 "Check important claims against source evidence",
                 "Analyze findings across sources",
+                "Synthesize the final research report",
             ],
         }
 
     def run(self, question, max_results=5):
-        """Run the research workflow."""
+        """Run the complete research workflow."""
 
         plan = self.create_plan(question)
 
@@ -31,9 +34,17 @@ class OrchestratorAgent:
             max_results=max_results,
         )
 
+        final_report = self.synthesizer.synthesize(
+            question,
+            result["sources"],
+            result["fact_check"],
+            result["analysis"],
+        )
+
         return {
             "plan": plan,
             "sources": result["sources"],
             "fact_check": result["fact_check"],
             "analysis": result["analysis"],
+            "final_report": final_report,
         }
