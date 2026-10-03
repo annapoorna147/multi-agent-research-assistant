@@ -1,5 +1,6 @@
 import os
 
+import streamlit as st
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
@@ -8,15 +9,26 @@ from google.genai import types
 load_dotenv()
 
 
+def get_api_key():
+    """Get the Gemini API key from Streamlit secrets or local .env."""
+
+    try:
+        api_key = st.secrets.get("GEMINI_API_KEY")
+    except Exception:
+        api_key = None
+
+    return api_key or os.getenv("GEMINI_API_KEY")
+
+
 class AnalystAgent:
-    """AI agent responsible for analyzing findings from multiple sources."""
+    """AI agent responsible for analyzing findings across sources."""
 
     def __init__(self):
-        api_key = os.getenv("GEMINI_API_KEY")
+        api_key = get_api_key()
 
         if not api_key:
             raise ValueError(
-                "GEMINI_API_KEY is not set. Add it to your .env file."
+                "GEMINI_API_KEY is not set."
             )
 
         self.client = genai.Client(
@@ -26,8 +38,8 @@ class AnalystAgent:
 
         self.model = "gemini-3.1-flash-lite"
 
-    def analyze(self, sources):
-        """Analyze findings across multiple sources."""
+    def analyze(self, question, sources):
+        """Analyze findings across research sources."""
 
         source_text = "\n\n".join(
             [
@@ -45,7 +57,10 @@ class AnalystAgent:
         prompt = f"""
 You are an analytical research assistant.
 
-Analyze the findings from the supplied sources.
+Analyze the supplied research sources in relation to the research question.
+
+Research question:
+{question}
 
 Source material:
 {source_text}
@@ -53,22 +68,17 @@ Source material:
 Return your analysis using these sections:
 
 1. Common Themes
-2. Key Findings
-3. Differences Between Sources
-4. Possible Contradictions
-5. Important Relationships
-6. Analytical Insights
-7. Evidence vs Interpretation
+2. Differences Between Sources
+3. Contradictions or Uncertainties
+4. Relationships Between Findings
+5. Key Insights
+6. Evidence vs Interpretation
 
 Important rules:
-
-- Use ONLY the supplied source material.
-- Do not invent facts, sources, or evidence.
+- Use only the supplied source material.
+- Do not invent facts or sources.
 - Clearly distinguish evidence from interpretation.
 - If the sources do not provide enough information, say so.
-- Do not claim that you verified information outside the supplied sources.
-- When identifying contradictions, explain exactly what differs.
-- Keep the analysis structured and concise.
 """
 
         response = self.client.models.generate_content(

@@ -5,7 +5,7 @@ from tools.web_search import search_web
 
 
 class ResearchPipeline:
-    """Search, extract, fact-check, and analyze research sources."""
+    """Search for sources and run the research analysis pipeline."""
 
     def __init__(self):
         self.extractor = SourceExtractor()
@@ -13,7 +13,7 @@ class ResearchPipeline:
         self.analyst = AnalystAgent()
 
     def research(self, query, max_results=5):
-        """Run the complete research pipeline."""
+        """Search, extract, fact-check, and analyze research sources."""
 
         search_results = search_web(query, max_results)
 
@@ -43,7 +43,10 @@ class ResearchPipeline:
             sources,
         )
 
-        analysis = self.analyst.analyze(sources)
+        analysis = self.analyst.analyze(
+            query,
+            sources,
+        )
 
         return {
             "query": query,
