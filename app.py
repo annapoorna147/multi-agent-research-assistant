@@ -1,3 +1,4 @@
+
 import streamlit as st
 
 from agents.orchestrator import OrchestratorAgent
@@ -73,4 +74,19 @@ if st.button("🚀 Start Research", type="primary"):
                 if source.get("success"):
                     st.success("Content extracted successfully.")
                 else:
-                    st.warning("Could not extract content from this source.")
+                    st.warning(
+                        "Could not extract content from this source."
+                    )
+
+# Footer
+st.markdown(
+    "<div style='text-align: center; margin-top: 40px; padding: 20px; "
+    "border-top: 1px solid rgba(128,128,128,0.2);'>"
+    "<p style='font-size: 15px; color: #888;'>"
+    "<strong>Created & Developed by Annapoorna S U</strong>"
+    "</p>"
+    "<p style='font-size: 13px; color: #888;'>"
+    "Multi-Agent Research Assistant"
+    "</p></div>",
+    unsafe_allow_html=True,
+)
