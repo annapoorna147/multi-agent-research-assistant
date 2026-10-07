@@ -59,7 +59,9 @@ class ResearchPipeline:
         question = question.strip()
 
         if not question:
-            raise ValueError("Research question cannot be empty.")
+            raise ValueError(
+                "Research question cannot be empty."
+            )
 
         # ------------------------------------------------------------------
         # 1. Research / Search
@@ -70,7 +72,6 @@ class ResearchPipeline:
             max_results=max_results,
         )
 
-        # Researcher may return either a list directly or a dictionary.
         if isinstance(research_result, dict):
             sources = research_result.get(
                 "sources",
@@ -87,22 +88,13 @@ class ResearchPipeline:
             }
 
         # ------------------------------------------------------------------
-        # 2. Source Intelligence
+        # 2. Source Intelligence + Ranking
         # ------------------------------------------------------------------
 
-        source_analysis = self.source_intelligence.analyze_sources(
+        ranked_sources = self.source_intelligence.rank_sources(
             sources,
             question,
         )
-
-        # Support both possible return structures.
-        if isinstance(source_analysis, dict):
-            ranked_sources = source_analysis.get(
-                "ranked_sources",
-                source_analysis.get("sources", []),
-            )
-        else:
-            ranked_sources = source_analysis
 
         # ------------------------------------------------------------------
         # 3. Best Sources
@@ -125,17 +117,11 @@ class ResearchPipeline:
         # ------------------------------------------------------------------
         # 5. Contradiction Detection
         # ------------------------------------------------------------------
-        #
-        # We intentionally build contradiction claims from source snippets.
-        #
-        # EvidenceIntelligence may extract only one formal claim from a group
-        # of sources. That would prevent the contradiction detector from
-        # comparing different sources.
-        #
-        # Source-level comparison allows Research AI to detect disagreements
-        # even when the evidence extractor does not convert every source into
-        # a formal claim.
-        # ------------------------------------------------------------------
+
+        # EvidenceIntelligence can extract a smaller number of
+        # formal claims. For contradiction detection we compare
+        # source-level snippets directly so that disagreements
+        # between different sources are not lost.
 
         contradiction_claims = []
 
@@ -186,10 +172,13 @@ class ResearchPipeline:
         # ------------------------------------------------------------------
 
         synthesis = self.synthesizer.synthesize(
-            question,
-            ranked_sources,
-            fact_checking,
-            analysis,
+            question=question,
+            sources=ranked_sources,
+            fact_check=fact_checking,
+            analysis=analysis,
+            evidence=evidence,
+            contradictions=contradiction_analysis,
+            best_sources=best_sources,
         )
 
         # ------------------------------------------------------------------
