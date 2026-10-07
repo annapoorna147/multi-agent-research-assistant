@@ -1,16 +1,14 @@
-from agents.synthesizer import SynthesizerAgent
 from tools.research_pipeline import ResearchPipeline
 
 
 class OrchestratorAgent:
-    """Agent responsible for coordinating the research workflow."""
+    """Thin orchestration wrapper for the V2 research pipeline."""
 
     def __init__(self):
         self.pipeline = ResearchPipeline()
-        self.synthesizer = SynthesizerAgent()
 
     def create_plan(self, question):
-        """Create a simple research workflow plan."""
+        """Create a high-level research workflow plan."""
 
         return {
             "question": question,
@@ -18,33 +16,62 @@ class OrchestratorAgent:
                 "Create a research brief",
                 "Search the web for relevant sources",
                 "Extract readable source content",
-                "Check important claims against source evidence",
+                "Rank and evaluate source quality",
+                "Map claims to supporting evidence",
+                "Detect contradictions and uncertainties",
+                "Fact-check important claims",
                 "Analyze findings across sources",
                 "Synthesize the final research report",
             ],
         }
 
     def run(self, question, max_results=5):
-        """Run the complete research workflow."""
+        """Run the complete V2 research workflow."""
 
         plan = self.create_plan(question)
 
-        result = self.pipeline.research(
+        result = self.pipeline.run(
             question,
             max_results=max_results,
         )
 
-        final_report = self.synthesizer.synthesize(
-            question,
-            result["sources"],
-            result["fact_check"],
-            result["analysis"],
-        )
-
         return {
             "plan": plan,
-            "sources": result["sources"],
-            "fact_check": result["fact_check"],
-            "analysis": result["analysis"],
-            "final_report": final_report,
+            "status": result.get("status"),
+            "question": result.get("question"),
+            "research_brief": result.get(
+                "research_brief"
+            ),
+            "sources": result.get(
+                "sources",
+                [],
+            ),
+            "ranked_sources": result.get(
+                "ranked_sources",
+                [],
+            ),
+            "best_sources": result.get(
+                "best_sources",
+                [],
+            ),
+            "evidence": result.get(
+                "evidence",
+                {},
+            ),
+            "contradictions": result.get(
+                "contradictions",
+                {},
+            ),
+            "fact_checking": result.get(
+                "fact_checking",
+                {},
+            ),
+            "analysis": result.get(
+                "analysis",
+                {},
+            ),
+            "final_report": result.get(
+                "final_report",
+                "",
+            ),
         }

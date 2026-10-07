@@ -5,6 +5,10 @@ function Workspace() {
   const [question, setQuestion] = useState("");
   const [mode, setMode] = useState("Standard");
 
+  const [isResearching, setIsResearching] = useState(false);
+  const [researchResult, setResearchResult] = useState(null);
+  const [error, setError] = useState("");
+
   const agents = [
     {
       name: "Researcher",
@@ -46,6 +50,51 @@ function Workspace() {
   const handleNewResearch = () => {
     setQuestion("");
     setMode("Standard");
+    setResearchResult(null);
+    setError("");
+    setIsResearching(false);
+  };
+
+  const handleStartResearch = async () => {
+    const trimmedQuestion = question.trim();
+
+    if (!trimmedQuestion || isResearching) {
+      return;
+    }
+
+    setIsResearching(true);
+    setResearchResult(null);
+    setError("");
+
+    try {
+      const response = await fetch("http://127.0.0.1:8000/api/research/", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          question: trimmedQuestion,
+          mode,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.detail || "Research request failed. Please try again."
+        );
+      }
+
+      setResearchResult(data);
+    } catch (requestError) {
+      setError(
+        requestError.message ||
+          "Unable to connect to the research service."
+      );
+    } finally {
+      setIsResearching(false);
+    }
   };
 
   return (
@@ -63,6 +112,7 @@ function Workspace() {
         <button
           className="new-research-button"
           onClick={handleNewResearch}
+          disabled={isResearching}
         >
           + New Research
         </button>
@@ -128,9 +178,13 @@ function Workspace() {
             <textarea
               id="research-question"
               value={question}
-              onChange={(event) => setQuestion(event.target.value)}
+              onChange={(event) => {
+                setQuestion(event.target.value);
+                setError("");
+              }}
               placeholder="Example: How will AI transform semiconductor manufacturing over the next five years?"
               rows={6}
+              disabled={isResearching}
             />
 
             <div className="panel-footer">
@@ -161,6 +215,7 @@ function Workspace() {
                       : "mode-card"
                   }
                   onClick={() => setMode(item.name)}
+                  disabled={isResearching}
                 >
                   <strong>{item.name}</strong>
 
@@ -203,11 +258,52 @@ function Workspace() {
 
           <button
             className="workspace-start-button"
-            disabled={!question.trim()}
+            onClick={handleStartResearch}
+            disabled={!question.trim() || isResearching}
           >
-            Start Research
-            <span>→</span>
+            {isResearching ? "Researching..." : "Start Research"}
+            <span>{isResearching ? "…" : "→"}</span>
           </button>
+
+          {error && (
+            <div className="research-error">
+              <strong>Research failed</strong>
+              <span>{error}</span>
+            </div>
+          )}
+
+          {researchResult && (
+            <div className="research-result">
+              <div className="result-header">
+                <div>
+                  <span className="section-label">RESEARCH COMPLETE</span>
+                  <h2>Research finished</h2>
+                </div>
+
+                <span className="result-status">
+                  {researchResult.status}
+                </span>
+              </div>
+
+              <div className="result-summary">
+                <strong>Question</strong>
+                <p>{researchResult.question}</p>
+              </div>
+
+              <div className="result-summary">
+                <strong>Research mode</strong>
+                <p>{researchResult.mode}</p>
+              </div>
+
+              <div className="result-summary">
+                <strong>Report</strong>
+                <pre>
+                  {researchResult.result?.final_report ||
+                    "Research completed, but no final report was returned."}
+                </pre>
+              </div>
+            </div>
+          )}
         </section>
       </main>
     </div>

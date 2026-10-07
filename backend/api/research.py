@@ -34,8 +34,44 @@ def get_max_results(mode: str) -> int:
     return 5
 
 
-@router.post("/", response_model=ResearchResponse)
-def start_research(request: ResearchRequest):
+def get_error_status(error: Exception) -> int:
+    """
+    Convert known temporary/external service errors
+    into an appropriate HTTP status.
+    """
+
+    message = str(error).lower()
+
+    if (
+        "503" in message
+        or "unavailable" in message
+        or "high demand" in message
+    ):
+        return 503
+
+    if (
+        "429" in message
+        or "resource exhausted" in message
+        or "rate limit" in message
+    ):
+        return 429
+
+    if (
+        "timeout" in message
+        or "timed out" in message
+    ):
+        return 504
+
+    return 500
+
+
+@router.post(
+    "/",
+    response_model=ResearchResponse,
+)
+def start_research(
+    request: ResearchRequest,
+):
     question = request.question.strip()
 
     if not question:
@@ -44,7 +80,9 @@ def start_research(request: ResearchRequest):
             detail="Research question cannot be empty.",
         )
 
-    max_results = get_max_results(request.mode)
+    max_results = get_max_results(
+        request.mode
+    )
 
     try:
         orchestrator = OrchestratorAgent()
@@ -62,7 +100,33 @@ def start_research(request: ResearchRequest):
         )
 
     except Exception as error:
+        status_code = get_error_status(error)
+
+        if status_code == 503:
+            detail = (
+                "The AI research service is temporarily "
+                "unavailable due to high demand. "
+                "Please try again shortly."
+            )
+
+        elif status_code == 429:
+            detail = (
+                "The AI research service is temporarily "
+                "rate-limited. Please try again shortly."
+            )
+
+        elif status_code == 504:
+            detail = (
+                "The research request timed out. "
+                "Please try again."
+            )
+
+        else:
+            detail = (
+                f"Research failed: {str(error)}"
+            )
+
         raise HTTPException(
-            status_code=500,
-            detail=f"Research failed: {str(error)}",
+            status_code=status_code,
+            detail=detail,
         ) from error
