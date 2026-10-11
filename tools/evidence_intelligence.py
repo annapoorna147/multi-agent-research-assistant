@@ -5,16 +5,20 @@ Day 3 of Multi-Agent Research Assistant V2.
 
 Responsibilities:
 - Extract meaningful claims from source content.
+- Rank claims by research usefulness.
+- Prioritize actual research findings and measured evidence.
+- Remove metadata and bibliographic/reference noise.
+- Remove duplicate or near-duplicate claims.
 - Find supporting evidence for each claim.
-- Map claims to their strongest sources.
+- Map claims to supporting evidence.
 - Calculate evidence strength.
-- Keep source attribution attached to every claim.
-- Prepare structured evidence data for fact checking and citation generation.
+- Build citation records and evidence summaries.
 """
 
 from __future__ import annotations
 
 import re
+from collections import Counter
 from typing import Any
 
 
@@ -22,59 +26,68 @@ class EvidenceIntelligence:
     """Build claim-to-evidence mappings from research sources."""
 
     STOPWORDS = {
-        "about",
-        "after",
-        "again",
-        "against",
-        "also",
-        "because",
-        "been",
-        "being",
-        "between",
-        "could",
-        "does",
-        "doesn",
-        "from",
-        "have",
-        "having",
-        "into",
-        "more",
-        "most",
-        "other",
-        "over",
-        "same",
-        "should",
-        "some",
-        "such",
-        "than",
-        "that",
-        "their",
-        "there",
-        "these",
-        "they",
-        "this",
-        "those",
-        "through",
-        "under",
-        "were",
-        "which",
-        "while",
-        "with",
-        "would",
-        "your",
-        "what",
-        "when",
-        "where",
-        "will",
-        "does",
-        "using",
-        "used",
-        "uses",
-        "based",
-        "many",
-        "much",
-        "only",
+        "about", "after", "again", "against", "also", "because",
+        "been", "being", "between", "could", "does", "doesn",
+        "from", "have", "having", "into", "more", "most", "other",
+        "over", "same", "should", "some", "such", "than", "that",
+        "their", "there", "these", "they", "this", "those",
+        "through", "under", "were", "which", "while", "with",
+        "would", "your", "what", "when", "where", "will",
+        "using", "used", "uses", "based", "many", "much", "only",
         "very",
+    }
+
+    RESEARCH_KEYWORDS = {
+        "ai", "artificial", "intelligence", "healthcare",
+        "clinical", "clinician", "doctor", "patient", "patients",
+        "diagnosis", "diagnostic", "disease", "treatment",
+        "medical", "medicine", "health", "imaging",
+        "algorithm", "algorithms", "machine", "learning", "deep",
+        "prediction", "predictive", "drug", "discovery",
+        "monitoring", "screening", "accuracy", "sensitivity",
+        "specificity", "study", "studies", "research", "evidence",
+        "trial", "trials", "analysis", "application",
+        "applications", "technology", "data", "electronic",
+        "records", "ehr", "surgery", "radiology", "cancer",
+        "telehealth", "outcome", "outcomes", "performance",
+        "model", "models", "detection", "identified",
+    }
+
+    HIGH_VALUE_RESEARCH_KEYWORDS = {
+        "study", "studies", "trial", "trials", "cohort",
+        "randomized", "clinical", "patients", "patient",
+        "diagnosis", "diagnostic", "treatment", "outcome",
+        "outcomes", "accuracy", "sensitivity", "specificity",
+        "performance", "validation", "validated", "prediction",
+        "predicted", "detected", "detection", "identified",
+        "identification", "improved", "improvement", "reduced",
+        "reduction", "increased", "increase", "decreased",
+        "decrease", "compared", "comparison", "effect", "effects",
+        "association", "associated", "evidence", "findings",
+        "results", "demonstrated", "reported", "evaluated",
+        "evaluation", "experiment", "experiments", "model",
+        "models", "algorithm", "algorithms",
+    }
+
+    LOW_VALUE_CONTENT_KEYWORDS = {
+        "course", "courses", "program", "programs",
+        "specialization", "curriculum", "enrollment", "enroll",
+        "learner", "learners", "beginner", "certificate",
+        "professor", "assistant", "faculty", "instructor",
+        "university", "school", "department", "biography",
+        "researcher", "career", "education", "students",
+    }
+
+    METADATA_KEYWORDS = {
+        "copyright", "license", "licence", "creativecommons",
+        "creative", "attribution", "author", "authors",
+        "pmcid", "pmid", "doi", "issn", "journal",
+        "publication", "published", "volume", "issue",
+        "abstract", "keywords", "received", "accepted",
+        "manuscript", "affiliation", "department", "funding",
+        "contributor", "contributions", "permission",
+        "reproduction", "distribution", "open-access", "terms",
+        "bibliography", "citation", "references",
     }
 
     def __init__(self) -> None:
@@ -127,33 +140,280 @@ class EvidenceIntelligence:
         if not text:
             return []
 
+        text = re.sub(
+            r"\[\s*\d+\s*\]",
+            "",
+            text,
+        )
+
+        text = re.sub(
+            r"\[\s*edit\s*\]",
+            ". ",
+            text,
+            flags=re.IGNORECASE,
+        )
+
+        text = re.sub(
+            r"\s+(?:edit|edited)\s+(?=[A-Z])",
+            ". ",
+            text,
+            flags=re.IGNORECASE,
+        )
+
         sentences = re.split(
             r"(?<=[.!?])\s+(?=[A-Z0-9])",
             text,
         )
 
-        cleaned = []
-
-        for sentence in sentences:
-            sentence = sentence.strip()
-
-            if len(sentence) < 35:
-                continue
-
-            cleaned.append(sentence)
-
-        return cleaned
+        return [
+            sentence.strip()
+            for sentence in sentences
+            if len(sentence.strip()) >= 35
+        ]
 
     # ------------------------------------------------------------------
-    # Claim extraction
+    # Claim quality scoring
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def _claim_quality_score(
+        cls,
+        sentence: str,
+    ) -> float:
+        """Score how useful a sentence is as a research claim."""
+
+        lowered = sentence.lower()
+        words = cls._keywords(sentence)
+
+        if not words:
+            return 0.0
+
+        word_counts = Counter(words)
+        word_set = set(word_counts)
+
+        research_matches = (
+            word_set & cls.RESEARCH_KEYWORDS
+        )
+
+        high_value_matches = (
+            word_set & cls.HIGH_VALUE_RESEARCH_KEYWORDS
+        )
+
+        low_value_matches = (
+            word_set & cls.LOW_VALUE_CONTENT_KEYWORDS
+        )
+
+        metadata_matches = (
+            word_set & cls.METADATA_KEYWORDS
+        )
+
+        score = 50.0
+
+        score += min(
+            len(research_matches) * 8,
+            40,
+        )
+
+        score += min(
+            len(high_value_matches) * 10,
+            50,
+        )
+
+        score -= min(
+            len(low_value_matches) * 12,
+            48,
+        )
+
+        score -= min(
+            len(metadata_matches) * 15,
+            60,
+        )
+
+        if len(word_counts) >= 8:
+            score += 5
+
+        if len(word_counts) >= 12:
+            score += 5
+
+        metadata_patterns = (
+            "copyright",
+            "creative commons",
+            "open-access article",
+            "pmcid:",
+            "pmid:",
+            "doi:",
+            "license",
+            "licence",
+            "terms of use",
+            "permission",
+            "reproduction",
+            "distribution",
+            "author(s)",
+            "department",
+            "affiliation",
+        )
+
+        for pattern in metadata_patterns:
+            if pattern in lowered:
+                score -= 30
+
+        # Quantitative evidence is highly valuable.
+        if re.search(
+            r"\b\d+(?:\.\d+)?\s*%",
+            sentence,
+        ):
+            score += 12
+
+        if re.search(
+            r"\b\d+(?:\.\d+)?\b",
+            sentence,
+        ):
+            score += 5
+
+        research_patterns = (
+            r"\bstudy\b",
+            r"\bstudies\b",
+            r"\bresearch\b",
+            r"\btrial\b",
+            r"\btrials\b",
+            r"\bfindings?\b",
+            r"\bevidence\b",
+            r"\bresults?\b",
+            r"\banalysis\b",
+            r"\bevaluat(?:e|ed|es|ing)\b",
+            r"\bcompared\b",
+            r"\bcompar(?:e|ed|ison)\b",
+            r"\bdemonstrat(?:e|ed|es|ing)\b",
+            r"\breported\b",
+            r"\bidentified\b",
+            r"\bdetected\b",
+            r"\bpredict(?:ed|s|ing)?\b",
+            r"\bvalidated\b",
+        )
+
+        for pattern in research_patterns:
+            if re.search(
+                pattern,
+                lowered,
+            ):
+                score += 6
+
+        if len(metadata_matches) >= 2:
+            score -= 25
+
+        if 60 <= len(sentence) <= 300:
+            score += 5
+
+        return max(score, 0.0)
+
+    # ------------------------------------------------------------------
+    # Claim filters
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _looks_like_claim(sentence: str) -> bool:
-        """
-        Determine whether a sentence contains a potentially
-        research-worthy factual statement.
-        """
+    def _is_reference_entry(
+        sentence: str,
+    ) -> bool:
+        """Reject bibliographic/reference-list fragments."""
+
+        lowered = sentence.lower()
+
+        reference_patterns = (
+            r"\bs2cid\b",
+            r"\bpmcid\b",
+            r"\bpmid\b",
+            r"\bdoi\s*:",
+            r"\bdoi\.org\b",
+            r"\bissn\b",
+            r"\bhttps?://",
+            r"\bwww\.",
+            r"\bcitation\b",
+            r"\bbibliography\b",
+            r"\breferences\b",
+            r"\baccessed\s+\w+\s+\d{4}\b",
+            r"\bretrieved\s+\d{1,2}\s+\w+\s+\d{4}\b",
+            r"\bavailable\s+at\b",
+            r"\bretrieved\s+from\b",
+            r"\bet al\.\b",
+        )
+
+        if any(
+            re.search(
+                pattern,
+                lowered,
+            )
+            for pattern in reference_patterns
+        ):
+            return True
+
+        # Typical reference structure:
+        # Author, A. A. (2020)...
+        if re.search(
+            r"^[A-Z][A-Za-z-]+,\s+[A-Z]\.",
+            sentence,
+        ):
+            return True
+
+        # Typical journal citation:
+        # Journal Name. 2020;12(3):123-130.
+        if re.search(
+            r"\b\d{4}\s*;\s*\d+\s*\(\s*\d+\s*\)",
+            sentence,
+        ):
+            return True
+
+        # Reference-like year + page pattern.
+        if re.search(
+            r"\b\d{4}\s*:\s*\d+(?:-\d+)?\b",
+            sentence,
+        ):
+            return True
+
+        return False
+
+    @staticmethod
+    def _is_metadata_sentence(
+        sentence: str,
+    ) -> bool:
+        """Reject obvious publication/license metadata."""
+
+        lowered = sentence.lower()
+
+        metadata_patterns = (
+            "creative commons",
+            "creativecommons",
+            "open-access article",
+            "copyright notice",
+            "copyright",
+            "terms of use",
+            "terms and conditions",
+            "distribution or reproduction",
+            "use, distribution or reproduction",
+            "permission is granted",
+            "original author",
+            "copyright owner",
+            "pmcid:",
+            "pmid:",
+            "doi:",
+            "issn:",
+            "journal homepage",
+            "author information",
+            "author contributions",
+            "funding information",
+            "data availability statement",
+            "conflict of interest",
+        )
+
+        return any(
+            pattern in lowered
+            for pattern in metadata_patterns
+        )
+
+    @staticmethod
+    def _looks_like_claim(
+        sentence: str,
+    ) -> bool:
+        """Determine whether a sentence contains a factual statement."""
 
         lowered = sentence.lower()
 
@@ -184,6 +444,17 @@ class EvidenceIntelligence:
             "privacy policy",
             "terms of service",
             "all rights reserved",
+            "jump to content",
+            "table of contents",
+            "free encyclopedia",
+            "from wikipedia",
+            "this article may",
+            "this article's style",
+            "learn how and when to remove",
+            "may incorporate text from",
+            "should be removed",
+            "hallucinated information",
+            "fictitious references",
         )
 
         if any(
@@ -215,133 +486,201 @@ class EvidenceIntelligence:
             r"\bincludes\b",
             r"\buses\b",
             r"\bused\b",
+            r"\bshowed\b",
+            r"\bfound\b",
+            r"\breported\b",
+            r"\bdemonstrated\b",
+            r"\bidentified\b",
+            r"\bdetected\b",
+            r"\bpredicted\b",
         )
 
         return any(
-            re.search(pattern, lowered)
+            re.search(
+                pattern,
+                lowered,
+            )
             for pattern in factual_patterns
         )
+
+    # ------------------------------------------------------------------
+    # Claim extraction
+    # ------------------------------------------------------------------
 
     def extract_claims(
         self,
         sources: list[dict[str, Any]],
         max_claims: int = 20,
     ) -> list[dict[str, Any]]:
-        """
-        Extract candidate factual claims from accessible sources.
+        """Extract, clean, rank and deduplicate research claims."""
 
-        Each claim retains its originating source so attribution
-        is never lost.
-        """
+        candidate_claims: list[dict[str, Any]] = []
 
-        claims: list[dict[str, Any]] = []
+        boilerplate_patterns = (
+            r"\bjump to content\b",
+            r"\btable of contents\b",
+            r"\bfrom wikipedia\b",
+            r"\bfree encyclopedia\b",
+            r"\bprivacy policy\b",
+            r"\bterms of use\b",
+            r"\bcookie policy\b",
+            r"\bcookies\b",
+            r"\bsubscribe\b",
+            r"\bsign in\b",
+            r"\blog in\b",
+            r"\bcreate account\b",
+            r"\bskip to\b",
+            r"\bmenu\b",
+            r"\bnavigation\b",
+            r"\bjavascript\b",
+            r"\bshare this\b",
+            r"\bfollow us\b",
+            r"\bcontact us\b",
+            r"\ball rights reserved\b",
+            r"\bthis article may\b",
+            r"\bthis article's style\b",
+            r"\blearn how and when to remove\b",
+            r"\bmay incorporate text from\b",
+            r"\bshould be removed\b",
+            r"\bhallucinated information\b",
+            r"\bfictitious references\b",
+        )
 
-        for source_index, source in enumerate(sources):
+        artifact_patterns = (
+            r"\bjump to\b",
+            r"\btable of contents\b",
+            r"\bfree encyclopedia\b",
+            r"\bfrom wikipedia\b",
+            r"\bedit section\b",
+            r"\bsee also\b",
+            r"\breferences\b$",
+            r"\bexternal links\b",
+        )
+
+        for source_index, source in enumerate(
+            sources
+        ):
             if not source.get("success"):
                 continue
 
-            text = source.get("text", "")
+            text = source.get(
+                "text",
+                "",
+            )
 
             if not text:
                 continue
 
-            sentences = self._split_sentences(text)
+            sentences = self._split_sentences(
+                text
+            )
 
             for sentence in sentences:
-                if not self._looks_like_claim(sentence):
+                cleaned_sentence = " ".join(
+                    sentence.split()
+                ).strip()
+
+                if not cleaned_sentence:
                     continue
 
-                keywords = self._keywords(sentence)
+                cleaned_sentence = re.sub(
+                    r"\[\s*\d+\s*\]",
+                    "",
+                    cleaned_sentence,
+                )
+
+                cleaned_sentence = re.sub(
+                    r"\[\s*edit\s*\]",
+                    "",
+                    cleaned_sentence,
+                    flags=re.IGNORECASE,
+                )
+
+                cleaned_sentence = " ".join(
+                    cleaned_sentence.split()
+                ).strip()
+
+                if not cleaned_sentence:
+                    continue
+
+                lowered_sentence = (
+                    cleaned_sentence.lower()
+                )
+
+                if any(
+                    re.search(
+                        pattern,
+                        lowered_sentence,
+                    )
+                    for pattern in boilerplate_patterns
+                ):
+                    continue
+
+                if any(
+                    re.search(
+                        pattern,
+                        lowered_sentence,
+                    )
+                    for pattern in artifact_patterns
+                ):
+                    continue
+
+                if self._is_reference_entry(
+                    cleaned_sentence
+                ):
+                    continue
+
+                if self._is_metadata_sentence(
+                    cleaned_sentence
+                ):
+                    continue
+
+                if len(cleaned_sentence) < 50:
+                    continue
+
+                if len(cleaned_sentence) > 500:
+                    continue
+
+                if not self._looks_like_claim(
+                    cleaned_sentence
+                ):
+                    continue
+
+                keywords = self._keywords(
+                    cleaned_sentence
+                )
 
                 if len(keywords) < 3:
                     continue
 
-                claim = {
-                    "claim_id": f"claim_{len(claims) + 1}",
-                    "claim": sentence,
-                    "source_index": source_index,
-                    "source_title": source.get("title", ""),
-                    "source_url": source.get("url", ""),
-                    "source_domain": source.get("domain", ""),
-                    "keywords": keywords,
+                citation_terms = {
+                    "s2cid",
+                    "pmcid",
+                    "pmid",
+                    "doi",
+                    "issn",
+                    "citation",
+                    "references",
+                    "bibliography",
                 }
 
-                claims.append(claim)
-
-                if len(claims) >= max_claims:
-                    self.last_claims = claims
-                    return claims
-
-        self.last_claims = claims
-
-        return claims
-
-    # ------------------------------------------------------------------
-    # Claim similarity
-    # ------------------------------------------------------------------
-
-    @classmethod
-    def _keyword_overlap(
-        cls,
-        first_text: str,
-        second_text: str,
-    ) -> float:
-        """Calculate Jaccard similarity between two keyword sets."""
-
-        first = set(cls._keywords(first_text))
-        second = set(cls._keywords(second_text))
-
-        if not first or not second:
-            return 0.0
-
-        intersection = first.intersection(second)
-        union = first.union(second)
-
-        return len(intersection) / len(union)
-
-    # ------------------------------------------------------------------
-    # Evidence extraction
-    # ------------------------------------------------------------------
-
-    def find_evidence(
-        self,
-        claim: dict[str, Any],
-        sources: list[dict[str, Any]],
-        max_evidence_per_source: int = 3,
-    ) -> list[dict[str, Any]]:
-        """
-        Find sentences from sources that are most relevant to a claim.
-        """
-
-        claim_text = claim.get("claim", "")
-
-        candidates: list[dict[str, Any]] = []
-
-        for source_index, source in enumerate(sources):
-            if not source.get("success"):
-                continue
-
-            text = source.get("text", "")
-
-            if not text:
-                continue
-
-            sentences = self._split_sentences(text)
-
-            source_candidates = []
-
-            for sentence in sentences:
-                overlap = self._keyword_overlap(
-                    claim_text,
-                    sentence,
-                )
-
-                if overlap <= 0:
+                if citation_terms.intersection(
+                    set(keywords)
+                ):
                     continue
 
-                source_candidates.append(
+                quality_score = (
+                    self._claim_quality_score(
+                        cleaned_sentence
+                    )
+                )
+
+                if quality_score < 35:
+                    continue
+
+                candidate_claims.append(
                     {
-                        "evidence": sentence,
+                        "claim": cleaned_sentence,
                         "source_index": source_index,
                         "source_title": source.get(
                             "title",
@@ -355,30 +694,227 @@ class EvidenceIntelligence:
                             "domain",
                             "",
                         ),
-                        "relevance_score": round(
-                            overlap * 100,
+                        "keywords": keywords,
+                        "quality_score": round(
+                            quality_score,
                             2,
                         ),
                     }
                 )
 
-            source_candidates.sort(
-                key=lambda item: item["relevance_score"],
-                reverse=True,
-            )
-
-            candidates.extend(
-                source_candidates[
-                    :max_evidence_per_source
-                ]
-            )
-
-        candidates.sort(
-            key=lambda item: item["relevance_score"],
+        # Rank by quality.
+        candidate_claims.sort(
+            key=lambda claim: claim[
+                "quality_score"
+            ],
             reverse=True,
         )
 
-        return candidates
+        # Remove duplicate / near-duplicate claims.
+        unique_claims: list[dict[str, Any]] = []
+
+        for candidate in candidate_claims:
+            duplicate = False
+
+            for existing in unique_claims:
+                similarity = self._keyword_overlap(
+                    candidate["claim"],
+                    existing["claim"],
+                )
+
+                if similarity >= 0.85:
+                    duplicate = True
+                    break
+
+            if not duplicate:
+                unique_claims.append(
+                    candidate
+                )
+
+        candidate_claims = unique_claims
+
+        # Select claims while maintaining source diversity.
+        selected_claims: list[dict[str, Any]] = []
+        source_counts: Counter[int] = Counter()
+
+        source_limit = max(
+            3,
+            max_claims // 2,
+        )
+
+        for claim in candidate_claims:
+            source_index = claim[
+                "source_index"
+            ]
+
+            if source_counts[
+                source_index
+            ] >= source_limit:
+                continue
+
+            selected_claims.append(
+                claim
+            )
+
+            source_counts[
+                source_index
+            ] += 1
+
+            if len(selected_claims) >= max_claims:
+                break
+
+        # Fill remaining slots if needed.
+        if len(selected_claims) < max_claims:
+            selected_ids = {
+                id(claim)
+                for claim in selected_claims
+            }
+
+            for claim in candidate_claims:
+                if id(claim) in selected_ids:
+                    continue
+
+                selected_claims.append(
+                    claim
+                )
+
+                if len(selected_claims) >= max_claims:
+                    break
+
+        # Assign stable claim IDs.
+        final_claims: list[dict[str, Any]] = []
+
+        for index, claim in enumerate(
+            selected_claims,
+            start=1,
+        ):
+            final_claims.append(
+                {
+                    "claim_id": f"claim_{index}",
+                    "claim": claim["claim"],
+                    "source_index": claim[
+                        "source_index"
+                    ],
+                    "source_title": claim[
+                        "source_title"
+                    ],
+                    "source_url": claim[
+                        "source_url"
+                    ],
+                    "source_domain": claim[
+                        "source_domain"
+                    ],
+                    "keywords": claim[
+                        "keywords"
+                    ],
+                    "quality_score": claim[
+                        "quality_score"
+                    ],
+                }
+            )
+
+        self.last_claims = final_claims
+
+        return final_claims
+
+    # ------------------------------------------------------------------
+    # Claim similarity
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def _keyword_overlap(
+        cls,
+        first_text: str,
+        second_text: str,
+    ) -> float:
+        """Calculate Jaccard similarity between two keyword sets."""
+
+        first = set(
+            cls._keywords(first_text)
+        )
+
+        second = set(
+            cls._keywords(second_text)
+        )
+
+        if not first or not second:
+            return 0.0
+
+        intersection = first & second
+        union = first | second
+
+        return len(intersection) / len(union)
+
+    # ------------------------------------------------------------------
+    # Evidence search
+    # ------------------------------------------------------------------
+
+    def find_supporting_evidence(
+        self,
+        claim: str,
+        sources: list[dict[str, Any]],
+        threshold: float = 0.15,
+    ) -> list[dict[str, Any]]:
+        """Find source passages that support a claim."""
+
+        evidence: list[dict[str, Any]] = []
+
+        for source_index, source in enumerate(
+            sources
+        ):
+            if not source.get("success"):
+                continue
+
+            text = source.get(
+                "text",
+                "",
+            )
+
+            if not text:
+                continue
+
+            sentences = self._split_sentences(
+                text
+            )
+
+            for sentence in sentences:
+                score = self._keyword_overlap(
+                    claim,
+                    sentence,
+                )
+
+                if score >= threshold:
+                    evidence.append(
+                        {
+                            "source_index": source_index,
+                            "source_title": source.get(
+                                "title",
+                                "",
+                            ),
+                            "source_url": source.get(
+                                "url",
+                                "",
+                            ),
+                            "source_domain": source.get(
+                                "domain",
+                                "",
+                            ),
+                            "evidence": sentence,
+                            "relevance_score": round(
+                                score * 100,
+                                2,
+                            ),
+                        }
+                    )
+
+        evidence.sort(
+            key=lambda item: item[
+                "relevance_score"
+            ],
+            reverse=True,
+        )
+
+        return evidence
 
     # ------------------------------------------------------------------
     # Evidence strength
@@ -388,20 +924,16 @@ class EvidenceIntelligence:
     def _evidence_strength(
         evidence_items: list[dict[str, Any]],
     ) -> str:
-        """
-        Convert evidence relevance and source diversity
-        into an evidence-strength label.
-
-        A direct/high-overlap match is strong evidence by itself.
-        Multiple reasonably relevant pieces of evidence provide
-        moderate support.
-        """
+        """Classify evidence strength."""
 
         if not evidence_items:
             return "No Evidence"
 
         scores = [
-            item.get("relevance_score", 0)
+            item.get(
+                "relevance_score",
+                0,
+            )
             for item in evidence_items
         ]
 
@@ -417,16 +949,12 @@ class EvidenceIntelligence:
             if score >= 25
         ]
 
-        # A direct/high-overlap match is strong evidence by itself.
         if strong_matches:
             return "Strong"
 
-        # Multiple reasonably relevant pieces of evidence
-        # provide moderate support.
         if len(moderate_matches) >= 2:
             return "Moderate"
 
-        # One meaningful but weaker match.
         if moderate_matches:
             return "Weak"
 
@@ -441,49 +969,47 @@ class EvidenceIntelligence:
         claims: list[dict[str, Any]],
         sources: list[dict[str, Any]],
     ) -> list[dict[str, Any]]:
-        """
-        Build the complete claim → evidence → source mapping.
-        """
+        """Build evidence mappings for extracted claims."""
 
         evidence_map: list[dict[str, Any]] = []
 
         for claim in claims:
-            evidence = self.find_evidence(
-                claim,
-                sources,
+            claim_text = claim.get(
+                "claim",
+                "",
             )
 
-            strength = self._evidence_strength(
-                evidence,
+            supporting_evidence = (
+                self.find_supporting_evidence(
+                    claim_text,
+                    sources,
+                )
             )
-
-            source_domains = []
-
-            for item in evidence:
-                domain = item.get(
-                    "source_domain",
-                    "",
-                ).strip()
-
-                if (
-                    domain
-                    and domain not in source_domains
-                ):
-                    source_domains.append(domain)
 
             evidence_map.append(
                 {
                     "claim_id": claim.get(
-                        "claim_id"
+                        "claim_id",
+                        "",
                     ),
-                    "claim": claim.get(
-                        "claim"
+                    "claim": claim_text,
+                    "source_title": claim.get(
+                        "source_title",
+                        "",
                     ),
-                    "evidence_strength": strength,
-                    "evidence": evidence,
-                    "supporting_sources": source_domains,
-                    "source_count": len(
-                        source_domains
+                    "source_url": claim.get(
+                        "source_url",
+                        "",
+                    ),
+                    "source_domain": claim.get(
+                        "source_domain",
+                        "",
+                    ),
+                    "evidence": supporting_evidence,
+                    "evidence_strength": (
+                        self._evidence_strength(
+                            supporting_evidence
+                        )
                     ),
                 }
             )
@@ -497,85 +1023,73 @@ class EvidenceIntelligence:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def build_citation(
-        evidence_item: dict[str, Any],
-        citation_number: int,
-    ) -> dict[str, Any]:
-        """Create a normalized citation record."""
-
-        return {
-            "citation_id": (
-                f"citation_{citation_number}"
-            ),
-            "source_title": evidence_item.get(
-                "source_title",
-                "",
-            ),
-            "source_url": evidence_item.get(
-                "source_url",
-                "",
-            ),
-            "source_domain": evidence_item.get(
-                "source_domain",
-                "",
-            ),
-            "evidence": evidence_item.get(
-                "evidence",
-                "",
-            ),
-        }
-
     def build_citations(
-        self,
         evidence_map: list[dict[str, Any]],
     ) -> list[dict[str, Any]]:
-        """
-        Build unique citation records from the evidence map.
-        """
+        """Build citation records from evidence mappings."""
 
         citations: list[dict[str, Any]] = []
-        seen_urls: set[str] = set()
 
         for item in evidence_map:
             for evidence in item.get(
                 "evidence",
                 [],
             ):
-                url = evidence.get(
-                    "source_url",
-                    "",
-                ).strip()
-
-                if not url or url in seen_urls:
-                    continue
-
-                seen_urls.add(url)
-
                 citations.append(
-                    self.build_citation(
-                        evidence,
-                        len(citations) + 1,
-                    )
+                    {
+                        "claim_id": item.get(
+                            "claim_id",
+                            "",
+                        ),
+                        "claim": item.get(
+                            "claim",
+                            "",
+                        ),
+                        "source_title": evidence.get(
+                            "source_title",
+                            "",
+                        ),
+                        "source_url": evidence.get(
+                            "source_url",
+                            "",
+                        ),
+                        "source_domain": evidence.get(
+                            "source_domain",
+                            "",
+                        ),
+                        "evidence": evidence.get(
+                            "evidence",
+                            "",
+                        ),
+                        "relevance_score": evidence.get(
+                            "relevance_score",
+                            0,
+                        ),
+                    }
                 )
 
         return citations
 
     # ------------------------------------------------------------------
-    # Summary helpers
+    # Summary
     # ------------------------------------------------------------------
 
     @staticmethod
-    def summarize_evidence(
+    def build_summary(
         evidence_map: list[dict[str, Any]],
     ) -> dict[str, Any]:
-        """Return high-level evidence statistics."""
+        """Summarize evidence coverage."""
 
-        total_claims = len(evidence_map)
+        total_claims = len(
+            evidence_map
+        )
 
         supported = sum(
             1
             for item in evidence_map
-            if item.get("evidence_strength")
+            if item.get(
+                "evidence_strength"
+            )
             in {
                 "Strong",
                 "Moderate",
@@ -585,18 +1099,34 @@ class EvidenceIntelligence:
         weak = sum(
             1
             for item in evidence_map
-            if item.get("evidence_strength")
-            == "Weak"
+            if item.get(
+                "evidence_strength"
+            ) == "Weak"
         )
 
         unsupported = sum(
             1
             for item in evidence_map
-            if item.get("evidence_strength")
+            if item.get(
+                "evidence_strength"
+            )
             in {
                 "No Evidence",
                 "Insufficient",
             }
+        )
+
+        support_rate = (
+            round(
+                (
+                    supported
+                    / total_claims
+                )
+                * 100,
+                2,
+            )
+            if total_claims
+            else 0.0
         )
 
         return {
@@ -604,16 +1134,11 @@ class EvidenceIntelligence:
             "supported_claims": supported,
             "weak_claims": weak,
             "unsupported_claims": unsupported,
-            "support_rate": round(
-                (supported / total_claims) * 100,
-                2,
-            )
-            if total_claims
-            else 0.0,
+            "support_rate": support_rate,
         }
 
     # ------------------------------------------------------------------
-    # Full Day 3 workflow
+    # Full analysis
     # ------------------------------------------------------------------
 
     def analyze(
@@ -621,9 +1146,7 @@ class EvidenceIntelligence:
         sources: list[dict[str, Any]],
         max_claims: int = 20,
     ) -> dict[str, Any]:
-        """
-        Run the complete evidence-intelligence workflow.
-        """
+        """Run the complete evidence intelligence workflow."""
 
         claims = self.extract_claims(
             sources,
@@ -636,11 +1159,11 @@ class EvidenceIntelligence:
         )
 
         citations = self.build_citations(
-            evidence_map,
+            evidence_map
         )
 
-        summary = self.summarize_evidence(
-            evidence_map,
+        summary = self.build_summary(
+            evidence_map
         )
 
         return {

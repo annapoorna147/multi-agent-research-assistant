@@ -81,9 +81,39 @@ Important rules:
 - If the sources do not provide enough information, say so.
 """
 
-        response = self.client.models.generate_content(
-            model=self.model,
-            contents=prompt,
-        )
+        try:
+            response = self.client.models.generate_content(
+                model=self.model,
+                contents=prompt,
+            )
 
-        return response.text
+            if not response or not response.text:
+                return (
+                    "ANALYSIS TEMPORARILY UNAVAILABLE\n\n"
+                    "The analysis agent returned an empty response. "
+                    "The available research sources can still be used "
+                    "for evidence and source comparison."
+                )
+
+            return response.text.strip()
+
+        except Exception as error:
+            message = str(error).lower()
+
+            if (
+                "503" in message
+                or "unavailable" in message
+                or "high demand" in message
+                or "429" in message
+                or "resource exhausted" in message
+                or "rate limit" in message
+            ):
+                return (
+                    "ANALYSIS TEMPORARILY UNAVAILABLE\n\n"
+                    "The analysis AI service is temporarily unavailable "
+                    "or rate-limited. The research pipeline continued "
+                    "using the available source evidence.\n\n"
+                    f"Service detail: {error}"
+                )
+
+            raise

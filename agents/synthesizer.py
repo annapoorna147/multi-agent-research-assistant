@@ -10,7 +10,7 @@ from google.genai import types
 load_dotenv()
 
 
-def get_api_key() -> str | None:
+def get_api_key():
     """Get the Gemini API key from Streamlit secrets or local .env."""
 
     try:
@@ -22,24 +22,17 @@ def get_api_key() -> str | None:
 
 
 class SynthesizerAgent:
-    """
-    AI agent responsible for creating the final
-    evidence-grounded research report.
-    """
+    """AI agent responsible for producing the final research report."""
 
-    def __init__(self) -> None:
+    def __init__(self):
         api_key = get_api_key()
 
         if not api_key:
-            raise ValueError(
-                "GEMINI_API_KEY is not set."
-            )
+            raise ValueError("GEMINI_API_KEY is not set.")
 
         self.client = genai.Client(
             api_key=api_key,
-            http_options=types.HttpOptions(
-                timeout=120000,
-            ),
+            http_options=types.HttpOptions(timeout=120000),
         )
 
         self.model = "gemini-3.1-flash-lite"
@@ -48,30 +41,28 @@ class SynthesizerAgent:
     def _format_sources(
         sources: list[dict[str, Any]],
     ) -> str:
-        """Format ranked sources for the synthesis prompt."""
+        """Format all ranked research sources."""
+
+        if not sources:
+            return "No research sources were provided."
 
         formatted_sources = []
 
-        for index, source in enumerate(sources):
-            title = source.get("title", "Untitled source")
-            url = source.get("url", "")
-            domain = source.get("domain", "")
-            snippet = source.get("snippet", "")
-            text = source.get("text", "")
-
-            content = text or snippet
-
-            if len(content) > 8000:
-                content = content[:8000]
-
+        for index, source in enumerate(sources, start=1):
             formatted_sources.append(
-                (
-                    f"Source {index + 1}\n"
-                    f"Title: {title}\n"
-                    f"Domain: {domain}\n"
-                    f"URL: {url}\n"
-                    f"Content:\n{content}"
-                )
+                f"""
+Source {index}
+-----------
+Title: {source.get("title", "")}
+URL: {source.get("url", "")}
+Domain: {source.get("domain", "")}
+Source Type: {source.get("source_type", "")}
+Overall Score: {source.get("overall_score", "")}
+Recommendation: {source.get("recommendation", "")}
+Snippet: {source.get("snippet", "")}
+Content:
+{source.get("text", "")[:12000]}
+""".strip()
             )
 
         return "\n\n".join(formatted_sources)
@@ -80,171 +71,92 @@ class SynthesizerAgent:
     def _format_best_sources(
         best_sources: list[dict[str, Any]],
     ) -> str:
-        """Format the highest-ranked sources."""
+        """Format the strongest sources selected by source intelligence."""
 
         if not best_sources:
-            return "No best sources were identified."
+            return "No best sources were selected."
 
-        formatted = []
+        formatted_sources = []
 
-        for index, source in enumerate(best_sources):
-            formatted.append(
-                (
-                    f"Best Source {index + 1}\n"
-                    f"Title: {source.get('title', '')}\n"
-                    f"Domain: {source.get('domain', '')}\n"
-                    f"URL: {source.get('url', '')}\n"
-                    f"Score: {source.get('overall_score', '')}\n"
-                    f"Recommendation: "
-                    f"{source.get('recommendation', '')}"
-                )
+        for index, source in enumerate(best_sources, start=1):
+            formatted_sources.append(
+                f"""
+Best Source {index}
+-----------------
+Title: {source.get("title", "")}
+URL: {source.get("url", "")}
+Domain: {source.get("domain", "")}
+Source Type: {source.get("source_type", "")}
+Overall Score: {source.get("overall_score", "")}
+Recommendation: {source.get("recommendation", "")}
+Snippet: {source.get("snippet", "")}
+""".strip()
             )
 
-        return "\n\n".join(formatted)
+        return "\n\n".join(formatted_sources)
 
     @staticmethod
     def _format_evidence(
         evidence: dict[str, Any] | None,
     ) -> str:
-        """Format evidence intelligence output."""
+        """Format evidence intelligence results."""
 
         if not evidence:
             return "No evidence intelligence was provided."
 
         summary = evidence.get("summary", {})
-        claims = evidence.get("claims", [])
-        evidence_map = evidence.get("evidence_map", [])
-        citations = evidence.get("citations", [])
+        claim_map = evidence.get("claim_evidence_map", [])
 
-        sections = [
+        formatted = [
             "Evidence Summary:",
             str(summary),
             "",
-            "Claims:",
+            "Claim-to-Evidence Mapping:",
         ]
 
-        for claim in claims:
-            sections.append(
-                (
-                    f"- {claim.get('claim_id', '')}: "
-                    f"{claim.get('claim', '')}"
-                )
-            )
+        if claim_map:
+            for item in claim_map:
+                formatted.append(str(item))
+        else:
+            formatted.append("No claim-to-evidence mappings were provided.")
 
-        sections.append("")
-        sections.append("Claim-to-Evidence Mapping:")
-
-        for item in evidence_map:
-            sections.append(
-                (
-                    f"- Claim: {item.get('claim_id', '')}\n"
-                    f"  Strength: {item.get('strength', '')}\n"
-                    f"  Evidence: {item.get('evidence', [])}"
-                )
-            )
-
-        sections.append("")
-        sections.append("Citation Records:")
-
-        for citation in citations:
-            sections.append(
-                f"- {citation}"
-            )
-
-        return "\n".join(sections)
+        return "\n".join(formatted)
 
     @staticmethod
     def _format_contradictions(
         contradictions: dict[str, Any] | None,
     ) -> str:
-        """Format contradiction analysis."""
+        """Format contradiction analysis results."""
 
         if not contradictions:
             return "No contradiction analysis was provided."
 
         summary = contradictions.get("summary", {})
 
-        contradiction_items = contradictions.get(
-            "contradictions",
-            [],
-        )
-
-        uncertainty_items = contradictions.get(
-            "uncertainties",
-            [],
-        )
-
-        agreement_items = contradictions.get(
-            "agreements",
-            [],
-        )
-
-        sections = [
+        formatted = [
             "Contradiction Summary:",
             str(summary),
             "",
+            "Agreements:",
+            str(contradictions.get("agreements", [])),
+            "",
             "Contradictions:",
+            str(contradictions.get("contradictions", [])),
+            "",
+            "Uncertainties:",
+            str(contradictions.get("uncertainties", [])),
         ]
 
-        if contradiction_items:
-            for item in contradiction_items:
-                sections.append(
-                    (
-                        f"- {item.get('first_source', '')} vs "
-                        f"{item.get('second_source', '')}: "
-                        f"{item.get('first_claim', '')} / "
-                        f"{item.get('second_claim', '')}"
-                    )
-                )
-        else:
-            sections.append(
-                "- No direct contradictions detected."
-            )
-
-        sections.append("")
-        sections.append("Uncertainties:")
-
-        if uncertainty_items:
-            for item in uncertainty_items:
-                sections.append(
-                    (
-                        f"- {item.get('first_source', '')} vs "
-                        f"{item.get('second_source', '')}: "
-                        f"{item.get('first_claim', '')} / "
-                        f"{item.get('second_claim', '')}"
-                    )
-                )
-        else:
-            sections.append(
-                "- No major uncertainty relationships detected."
-            )
-
-        sections.append("")
-        sections.append("Agreements:")
-
-        if agreement_items:
-            for item in agreement_items:
-                sections.append(
-                    (
-                        f"- {item.get('first_source', '')} and "
-                        f"{item.get('second_source', '')}"
-                    )
-                )
-        else:
-            sections.append(
-                "- No strong cross-source agreements detected."
-            )
-
-        return "\n".join(sections)
+        return "\n".join(formatted)
 
     @staticmethod
     def _format_fact_check(
         fact_check: Any,
     ) -> str:
-        """Format fact-check results."""
+        """Format fact-checking results."""
 
         if not fact_check:
-            return "No fact-check results were provided."
+            return "No fact-checking results were provided."
 
         return str(fact_check)
 
@@ -422,18 +334,61 @@ IMPORTANT RULES
     conclusion, clearly state that the evidence is
     insufficient.
 
+20. Format the final report as Markdown.
+
+21. Use Markdown headings, bullet lists and tables where
+    they improve readability.
+
+22. Keep source URLs visible in the Sources and Citations
+    section.
+
 The final answer must be a research report, not a
 description of your process.
 """
 
-        response = self.client.models.generate_content(
-            model=self.model,
-            contents=prompt,
-        )
-
-        if not response or not response.text:
-            raise RuntimeError(
-                "Synthesizer returned an empty response."
+        try:
+            response = self.client.models.generate_content(
+                model=self.model,
+                contents=prompt,
             )
 
-        return response.text.strip()
+            if not response or not response.text:
+                raise RuntimeError(
+                    "Synthesizer returned an empty response."
+                )
+
+            return response.text.strip()
+
+        except Exception as error:
+            message = str(error).lower()
+
+            if (
+                "503" in message
+                or "unavailable" in message
+                or "high demand" in message
+                or "429" in message
+                or "resource exhausted" in message
+                or "rate limit" in message
+            ):
+                return (
+                    "# Research Report\n\n"
+                    "## Research Synthesis Temporarily Unavailable\n\n"
+                    "The research pipeline successfully collected and "
+                    "analyzed the available sources, evidence, and "
+                    "fact-checking information, but the final AI "
+                    "synthesis service is temporarily unavailable.\n\n"
+                    "The underlying research data is still available "
+                    "in the sections below.\n\n"
+                    "## Evidence\n\n"
+                    f"{evidence_text}\n\n"
+                    "## Contradiction Analysis\n\n"
+                    f"{contradiction_text}\n\n"
+                    "## Fact-Checked Claims\n\n"
+                    f"{fact_check_text}\n\n"
+                    "## Analysis and Insights\n\n"
+                    f"{analysis_text}\n\n"
+                    "## Sources and Citations\n\n"
+                    f"{best_source_text}"
+                )
+
+            raise

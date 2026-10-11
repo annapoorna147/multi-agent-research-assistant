@@ -1,3 +1,5 @@
+import ReactMarkdown from "react-markdown";
+
 function ResearchResults({ result }) {
   if (!result) {
     return null;
@@ -48,23 +50,17 @@ function ResearchResults({ result }) {
 
         <div className="result-stat">
           <span>CLAIMS ANALYZED</span>
-          <strong>
-            {evidenceSummary.total_claims ?? 0}
-          </strong>
+          <strong>{evidenceSummary.total_claims ?? 0}</strong>
         </div>
 
         <div className="result-stat">
           <span>SUPPORTED</span>
-          <strong>
-            {evidenceSummary.supported_claims ?? 0}
-          </strong>
+          <strong>{evidenceSummary.supported_claims ?? 0}</strong>
         </div>
 
         <div className="result-stat">
           <span>CONTRADICTIONS</span>
-          <strong>
-            {contradictionSummary.contradictions ?? 0}
-          </strong>
+          <strong>{contradictionSummary.contradictions ?? 0}</strong>
         </div>
       </div>
 
@@ -83,7 +79,9 @@ function ResearchResults({ result }) {
 
         <div className="final-report">
           {finalReport ? (
-            <pre>{finalReport}</pre>
+            <div className="markdown-report">
+              <ReactMarkdown>{finalReport}</ReactMarkdown>
+            </div>
           ) : (
             <p>No final report was returned.</p>
           )}
@@ -115,9 +113,7 @@ function ResearchResults({ result }) {
                 </div>
 
                 <div className="source-content">
-                  <h4>
-                    {source.title || "Untitled source"}
-                  </h4>
+                  <h4>{source.title || "Untitled source"}</h4>
 
                   <span className="source-domain">
                     {source.domain || source.url || "Unknown source"}
@@ -138,8 +134,7 @@ function ResearchResults({ result }) {
                     </span>
 
                     <span>
-                      {source.recommendation ||
-                        "Evaluated source"}
+                      {source.recommendation || "Evaluated source"}
                     </span>
                   </div>
                 </div>
@@ -178,23 +173,17 @@ function ResearchResults({ result }) {
 
           <div>
             <span>Strong evidence</span>
-            <strong>
-              {evidenceSummary.strong ?? 0}
-            </strong>
+            <strong>{evidenceSummary.strong ?? 0}</strong>
           </div>
 
           <div>
             <span>Weak evidence</span>
-            <strong>
-              {evidenceSummary.weak ?? 0}
-            </strong>
+            <strong>{evidenceSummary.weak ?? 0}</strong>
           </div>
 
           <div>
             <span>Unsupported</span>
-            <strong>
-              {evidenceSummary.unsupported ?? 0}
-            </strong>
+            <strong>{evidenceSummary.unsupported ?? 0}</strong>
           </div>
         </div>
       </section>

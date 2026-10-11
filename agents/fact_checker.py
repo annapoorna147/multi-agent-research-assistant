@@ -27,9 +27,7 @@ class FactCheckerAgent:
         api_key = get_api_key()
 
         if not api_key:
-            raise ValueError(
-                "GEMINI_API_KEY is not set."
-            )
+            raise ValueError("GEMINI_API_KEY is not set.")
 
         self.client = genai.Client(
             api_key=api_key,
@@ -92,9 +90,31 @@ Important rules:
 - Keep the distinction between evidence and interpretation clear.
 """
 
-        response = self.client.models.generate_content(
-            model=self.model,
-            contents=prompt,
-        )
+        try:
+            response = self.client.models.generate_content(
+                model=self.model,
+                contents=prompt,
+            )
 
-        return response.text
+            return response.text or "No fact-checking result was returned."
+
+        except Exception as error:
+            message = str(error).lower()
+
+            if (
+                "503" in message
+                or "unavailable" in message
+                or "high demand" in message
+                or "429" in message
+                or "resource exhausted" in message
+                or "rate limit" in message
+            ):
+                return (
+                    "FACT CHECKING TEMPORARILY UNAVAILABLE\n\n"
+                    "The fact-checking AI service is temporarily "
+                    "unavailable or rate-limited. The research pipeline "
+                    "continued using the available source evidence.\n\n"
+                    f"Service detail: {error}"
+                )
+
+            raise
