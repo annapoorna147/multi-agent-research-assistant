@@ -1,6 +1,11 @@
+
 import { useState } from "react";
 import "./Workspace.css";
 import ResearchResults from "./ResearchResults";
+
+const API_BASE_URL = (
+  import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000"
+).replace(/\/+$/, "");
 
 function Workspace() {
   const [question, setQuestion] = useState("");
@@ -34,18 +39,9 @@ function Workspace() {
   ];
 
   const researchModes = [
-    {
-      name: "Quick",
-      description: "Fast overview",
-    },
-    {
-      name: "Standard",
-      description: "Balanced research",
-    },
-    {
-      name: "Deep",
-      description: "Maximum investigation",
-    },
+    { name: "Quick", description: "Fast overview" },
+    { name: "Standard", description: "Balanced research" },
+    { name: "Deep", description: "Maximum investigation" },
   ];
 
   const handleNewResearch = () => {
@@ -69,7 +65,7 @@ function Workspace() {
 
     try {
       const response = await fetch(
-        "http://127.0.0.1:8000/api/research/",
+        `${API_BASE_URL}/api/research/`,
         {
           method: "POST",
           headers: {
@@ -82,12 +78,13 @@ function Workspace() {
         }
       );
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
         throw new Error(
           data.detail ||
-            "Research request failed. Please try again."
+            data.error ||
+            `Research request failed (HTTP ${response.status}).`
         );
       }
 
@@ -95,7 +92,7 @@ function Workspace() {
     } catch (requestError) {
       setError(
         requestError.message ||
-          "Unable to connect to the research service."
+          "Unable to connect to the research service. Please try again."
       );
     } finally {
       setIsResearching(false);
@@ -107,7 +104,6 @@ function Workspace() {
       <header className="workspace-header">
         <div className="workspace-brand">
           <div className="workspace-logo">R</div>
-
           <div>
             <strong>Research AI</strong>
             <span>Research Workspace</span>
@@ -124,176 +120,110 @@ function Workspace() {
       </header>
 
       <main className="workspace-main">
-        <aside className="workspace-sidebar">
-          <div className="sidebar-section">
-            <span className="sidebar-label">WORKSPACE</span>
+        <section className="workspace-intro">
+          <p className="workspace-eyebrow">MULTI-AGENT RESEARCH</p>
+          <h1>What do you want to understand?</h1>
+          <p>
+            Ask a question. Research AI will investigate sources,
+            examine evidence, and build a structured report.
+          </p>
+        </section>
 
-            <button className="sidebar-item active">
-              <span>⌕</span>
-              Research
-            </button>
+        <section className="research-composer">
+          <label htmlFor="research-question">
+            Your research question
+          </label>
 
-            <button className="sidebar-item">
-              <span>◷</span>
-              History
-            </button>
+          <textarea
+            id="research-question"
+            value={question}
+            onChange={(event) => setQuestion(event.target.value)}
+            placeholder="Example: How is AI changing healthcare, and what are its limitations?"
+            rows={5}
+            disabled={isResearching}
+          />
 
-            <button className="sidebar-item">
-              <span>▣</span>
-              Saved Reports
-            </button>
-          </div>
+          <div className="research-mode-heading">Research depth</div>
 
-          <div className="sidebar-section">
-            <span className="sidebar-label">RESEARCH</span>
-
-            <button className="sidebar-item">
-              <span>⚙</span>
-              Settings
-            </button>
-          </div>
-
-          <div className="sidebar-user">
-            <div className="user-avatar">A</div>
-
-            <div>
-              <strong>Annapoorna S U</strong>
-              <span>Researcher</span>
-            </div>
-          </div>
-        </aside>
-
-        <section className="workspace-content">
-          <div className="workspace-title">
-            <span className="section-label">NEW RESEARCH</span>
-
-            <h1>What would you like to discover?</h1>
-
-            <p>
-              Ask a question and let our specialized AI agents
-              research, verify, analyze, and synthesize the answer.
-            </p>
-          </div>
-
-          {!researchResult && (
-            <>
-              <div className="research-panel">
-                <label htmlFor="research-question">
-                  Research question
-                </label>
-
-                <textarea
-                  id="research-question"
-                  value={question}
-                  onChange={(event) => {
-                    setQuestion(event.target.value);
-                    setError("");
-                  }}
-                  placeholder="Example: How will AI transform semiconductor manufacturing over the next five years?"
-                  rows={6}
-                  disabled={isResearching}
-                />
-
-                <div className="panel-footer">
-                  <span>{question.length} characters</span>
-
-                  <span>
-                    Sources will be cited automatically
-                  </span>
-                </div>
-              </div>
-
-              <div className="mode-section">
-                <div className="mode-heading">
-                  <div>
-                    <strong>Research mode</strong>
-
-                    <span>
-                      Choose how deeply the agents should investigate.
-                    </span>
-                  </div>
-                </div>
-
-                <div className="mode-grid">
-                  {researchModes.map((item) => (
-                    <button
-                      key={item.name}
-                      className={
-                        mode === item.name
-                          ? "mode-card selected"
-                          : "mode-card"
-                      }
-                      onClick={() => setMode(item.name)}
-                      disabled={isResearching}
-                    >
-                      <strong>{item.name}</strong>
-
-                      <span>{item.description}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="agents-section">
-                <div className="mode-heading">
-                  <div>
-                    <strong>AI research team</strong>
-
-                    <span>
-                      Multiple specialized agents collaborate on your
-                      research.
-                    </span>
-                  </div>
-                </div>
-
-                <div className="agents-grid">
-                  {agents.map((agent) => (
-                    <div
-                      className="workspace-agent"
-                      key={agent.name}
-                    >
-                      <div className="agent-icon">
-                        {agent.icon}
-                      </div>
-
-                      <div>
-                        <strong>{agent.name}</strong>
-
-                        <span>{agent.description}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
+          <div className="research-modes">
+            {researchModes.map((researchMode) => (
               <button
-                className="workspace-start-button"
-                onClick={handleStartResearch}
-                disabled={!question.trim() || isResearching}
+                key={researchMode.name}
+                type="button"
+                className={
+                  mode === researchMode.name
+                    ? "research-mode active"
+                    : "research-mode"
+                }
+                onClick={() => setMode(researchMode.name)}
+                disabled={isResearching}
               >
-                {isResearching
-                  ? "Researching..."
-                  : "Start Research"}
-
-                <span>
-                  {isResearching ? "…" : "→"}
-                </span>
+                <strong>{researchMode.name}</strong>
+                <span>{researchMode.description}</span>
               </button>
+            ))}
+          </div>
 
-              {error && (
-                <div className="research-error">
-                  <strong>Research failed</strong>
+          <div className="research-submit-row">
+            <span className="research-privacy-note">
+              Verify important findings against their original sources.
+            </span>
 
-                  <span>{error}</span>
-                </div>
-              )}
-            </>
+            <button
+              type="button"
+              className="start-research-button"
+              onClick={handleStartResearch}
+              disabled={!question.trim() || isResearching}
+            >
+              {isResearching ? "Researching..." : "Start Research →"}
+            </button>
+          </div>
+
+          {isResearching && (
+            <p className="research-progress" role="status">
+              Research is in progress. This may take a little time.
+            </p>
           )}
 
-          {researchResult && (
-            <ResearchResults result={researchResult} />
+          {error && (
+            <div className="research-error" role="alert">
+              <strong>Research request failed</strong>
+              <p>{error}</p>
+              <button
+                type="button"
+                onClick={handleStartResearch}
+                disabled={isResearching || !question.trim()}
+              >
+                Try again
+              </button>
+            </div>
           )}
         </section>
+
+        {!researchResult && (
+          <section className="agent-overview">
+            <div className="agent-overview-heading">
+              <h2>Your research team</h2>
+              <p>Four specialist roles support the research process.</p>
+            </div>
+
+            <div className="agent-grid">
+              {agents.map((agent) => (
+                <article className="agent-card" key={agent.name}>
+                  <div className="agent-icon" aria-hidden="true">
+                    {agent.icon}
+                  </div>
+                  <h3>{agent.name}</h3>
+                  <p>{agent.description}</p>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {researchResult && (
+          <ResearchResults result={researchResult} />
+        )}
       </main>
     </div>
   );

@@ -1,3 +1,4 @@
+
 from typing import Any
 
 from agents.analyst import AnalystAgent
@@ -38,16 +39,25 @@ class ResearchPipeline:
             if not url:
                 continue
 
-            extracted = self.source_extractor.extract(url)
+            try:
+                extracted = self.source_extractor.extract(url)
+            except Exception as exc:
+                extracted = {
+                    "text": "",
+                    "success": False,
+                    "error": f"Extraction failed: {exc}",
+                }
 
-            enriched_sources.append({
-                "title": result.get("title", ""),
-                "url": url,
-                "snippet": result.get("snippet", ""),
-                "text": extracted.get("text", ""),
-                "success": extracted.get("success", False),
-                "error": extracted.get("error", ""),
-            })
+            enriched_sources.append(
+                {
+                    "title": result.get("title", ""),
+                    "url": url,
+                    "snippet": result.get("snippet", ""),
+                    "text": extracted.get("text", ""),
+                    "success": extracted.get("success", False),
+                    "error": extracted.get("error", ""),
+                }
+            )
 
         return enriched_sources
 
@@ -60,11 +70,50 @@ class ResearchPipeline:
 
         for source in sources:
             text = source.get("text", "")
-            if source.get("success") is True and isinstance(text, str):
-                if len(text.strip()) >= SourceExtractor.MIN_CONTENT_LENGTH:
-                    usable.append(source)
+            if (
+                source.get("success") is True
+                and isinstance(text, str)
+                and len(text.strip()) >= SourceExtractor.MIN_CONTENT_LENGTH
+            ):
+                usable.append(source)
 
         return usable
+
+    @staticmethod
+    def _source_summary(
+        sources: list[dict[str, Any]],
+        usable_sources: list[dict[str, Any]],
+    ) -> dict[str, int]:
+        """Summarize discovered, usable, and rejected sources."""
+        return {
+            "discovered": len(sources),
+            "usable": len(usable_sources),
+            "rejected": len(sources) - len(usable_sources),
+        }
+
+    @staticmethod
+    def _source_diagnostics(
+        sources: list[dict[str, Any]],
+        usable_sources: list[dict[str, Any]],
+    ) -> list[dict[str, str]]:
+        """Return concise diagnostics for sources that could not be used."""
+        usable_urls = {source.get("url") for source in usable_sources}
+        rejected = []
+
+        for source in sources:
+            if source.get("url") in usable_urls:
+                continue
+
+            error = source.get("error") or "No usable article text was extracted."
+            rejected.append(
+                {
+                    "title": source.get("title", ""),
+                    "url": source.get("url", ""),
+                    "error": error,
+                }
+            )
+
+        return rejected
 
     def run(
         self,
@@ -81,6 +130,8 @@ class ResearchPipeline:
 
         sources = self._discover_sources(question, max_results)
         usable_sources = self._usable_sources(sources)
+        source_summary = self._source_summary(sources, usable_sources)
+        source_diagnostics = self._source_diagnostics(sources, usable_sources)
 
         if not sources:
             return {
@@ -91,24 +142,23 @@ class ResearchPipeline:
                 "sources": [],
                 "ranked_sources": [],
                 "best_sources": [],
+                "source_summary": source_summary,
+                "source_diagnostics": [],
                 "evidence": {},
                 "contradictions": {},
                 "fact_checking": {},
                 "analysis": {},
                 "final_report": (
-                    "## Research could not be completed\n\n"
-                    "The search returned no usable sources. Please try again."
+                    "# Research could not be completed\n\n"
+                    "The search returned no sources. Please try again."
                 ),
             }
 
         if not usable_sources:
-            failed_sources = [
-                {
-                    "title": source.get("title", ""),
-                    "url": source.get("url", ""),
-                    "error": source.get("error", "No usable article text."),
-                }
-                for source in sources
+            diagnostic_lines = [
+                f"- [{item['title'] or item['url']}]({item['url']}): "
+                f"{item['error']}"
+                for item in source_diagnostics
             ]
 
             return {
@@ -122,6 +172,8 @@ class ResearchPipeline:
                 "sources": sources,
                 "ranked_sources": [],
                 "best_sources": [],
+                "source_summary": source_summary,
+                "source_diagnostics": source_diagnostics,
                 "evidence": {
                     "claims": [],
                     "summary": {
@@ -131,8 +183,10 @@ class ResearchPipeline:
                 },
                 "contradictions": {
                     "summary": {
-                        "message": "Contradiction analysis skipped because "
-                        "usable article content was unavailable.",
+                        "message": (
+                            "Contradiction analysis skipped because usable "
+                            "article content was unavailable."
+                        ),
                     },
                     "contradictions": [],
                 },
@@ -149,21 +203,17 @@ class ResearchPipeline:
                     f"**Research question:** {question}\n\n"
                     "Search results were found, but the available pages did not "
                     "provide enough accessible article text to support a reliable "
-                    "research report. Some sites returned access restrictions or "
-                    "browser verification pages.\n\n"
+                    "research report. Some sites may return access restrictions "
+                    "or browser verification pages.\n\n"
                     "No substantive findings are presented because they could not "
-                    "be grounded in the extracted article content.\n\n"
+                    "be grounded in extracted article content.\n\n"
                     "## Source access status\n\n"
-                    + "\n".join(
-                        f"- [{item['title'] or item['url']}]({item['url']}): "
-                        f"{item['error']}"
-                        for item in failed_sources
-                    )
+                    + "\n".join(diagnostic_lines)
                     + "\n\nPlease retry later or use accessible full-text sources."
                 ),
             }
 
-        # Rank only sources with validated, sufficiently long article text.
+        # Only validated, sufficiently long article text enters evidence analysis.
         ranked_sources = self.source_intelligence.rank_sources(
             usable_sources,
             question,
@@ -190,11 +240,13 @@ class ResearchPipeline:
         for index, source in enumerate(ranked_sources, start=1):
             text = source.get("text", "").strip()
             if text:
-                contradiction_claims.append({
-                    "claim_id": f"source_claim_{index}",
-                    "claim": text[:5000],
-                    "source_domain": source.get("domain", ""),
-                })
+                contradiction_claims.append(
+                    {
+                        "claim_id": f"source_claim_{index}",
+                        "claim": text[:5000],
+                        "source_domain": source.get("domain", ""),
+                    }
+                )
 
         contradiction_analysis = self.contradiction_detector.analyze(
             contradiction_claims
@@ -205,7 +257,10 @@ class ResearchPipeline:
             ranked_sources,
         )
 
-        analysis = self.analyst.analyze(question, ranked_sources)
+        analysis = self.analyst.analyze(
+            question,
+            ranked_sources,
+        )
 
         synthesis = self.synthesizer.synthesize(
             question=question,
@@ -223,15 +278,13 @@ class ResearchPipeline:
             "sources": sources,
             "ranked_sources": ranked_sources,
             "best_sources": best_sources,
+            "source_summary": source_summary,
+            "source_diagnostics": source_diagnostics,
             "evidence": evidence,
             "contradictions": contradiction_analysis,
             "fact_checking": fact_checking,
             "analysis": analysis,
             "final_report": synthesis,
             "status": "completed",
-            "source_summary": {
-                "discovered": len(sources),
-                "usable": len(usable_sources),
-                "rejected": len(sources) - len(usable_sources),
-            },
+            "error": None,
         }

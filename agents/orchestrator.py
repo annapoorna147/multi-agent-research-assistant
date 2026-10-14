@@ -1,15 +1,15 @@
+
 from tools.research_pipeline import ResearchPipeline
 
 
 class OrchestratorAgent:
-    """Thin orchestration wrapper for the V2 research pipeline."""
+    """Coordinates the complete V2 research workflow."""
 
     def __init__(self):
         self.pipeline = ResearchPipeline()
 
     def create_plan(self, question):
-        """Create a high-level research workflow plan."""
-
+        """Create the research execution plan."""
         return {
             "question": question,
             "steps": [
@@ -26,8 +26,7 @@ class OrchestratorAgent:
         }
 
     def run(self, question, max_results=5):
-        """Run the complete V2 research workflow."""
-
+        """Run the complete research workflow."""
         plan = self.create_plan(question)
 
         result = self.pipeline.run(
@@ -39,39 +38,18 @@ class OrchestratorAgent:
             "plan": plan,
             "status": result.get("status"),
             "question": result.get("question"),
-            "research_brief": result.get(
-                "research_brief"
+            "research_brief": result.get("research_brief"),
+            "sources": result.get("sources", []),
+            "ranked_sources": result.get("ranked_sources", []),
+            "best_sources": result.get("best_sources", []),
+            "source_summary": result.get("source_summary", {}),
+            "source_diagnostics": result.get(
+                "source_diagnostics", []
             ),
-            "sources": result.get(
-                "sources",
-                [],
-            ),
-            "ranked_sources": result.get(
-                "ranked_sources",
-                [],
-            ),
-            "best_sources": result.get(
-                "best_sources",
-                [],
-            ),
-            "evidence": result.get(
-                "evidence",
-                {},
-            ),
-            "contradictions": result.get(
-                "contradictions",
-                {},
-            ),
-            "fact_checking": result.get(
-                "fact_checking",
-                {},
-            ),
-            "analysis": result.get(
-                "analysis",
-                {},
-            ),
-            "final_report": result.get(
-                "final_report",
-                "",
-            ),
+            "evidence": result.get("evidence", {}),
+            "contradictions": result.get("contradictions", {}),
+            "fact_checking": result.get("fact_checking", {}),
+            "analysis": result.get("analysis", {}),
+            "final_report": result.get("final_report", ""),
+            "error": result.get("error"),
         }
