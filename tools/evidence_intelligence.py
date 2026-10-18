@@ -1078,63 +1078,48 @@ class EvidenceIntelligence:
     def build_summary(
         evidence_map: list[dict[str, Any]],
     ) -> dict[str, Any]:
-        """Summarize evidence coverage."""
+        """Summarize evidence coverage, not factual verification."""
 
-        total_claims = len(
-            evidence_map
+        total_claims = len(evidence_map)
+
+        strong = sum(
+            1 for item in evidence_map
+            if item.get("evidence_strength") == "Strong"
         )
-
-        supported = sum(
-            1
-            for item in evidence_map
-            if item.get(
-                "evidence_strength"
-            )
-            in {
-                "Strong",
-                "Moderate",
-            }
+        moderate = sum(
+            1 for item in evidence_map
+            if item.get("evidence_strength") == "Moderate"
         )
-
         weak = sum(
-            1
-            for item in evidence_map
-            if item.get(
-                "evidence_strength"
-            ) == "Weak"
+            1 for item in evidence_map
+            if item.get("evidence_strength") == "Weak"
+        )
+        insufficient = sum(
+            1 for item in evidence_map
+            if item.get("evidence_strength")
+            in {"No Evidence", "Insufficient"}
         )
 
-        unsupported = sum(
-            1
-            for item in evidence_map
-            if item.get(
-                "evidence_strength"
-            )
-            in {
-                "No Evidence",
-                "Insufficient",
-            }
-        )
-
-        support_rate = (
-            round(
-                (
-                    supported
-                    / total_claims
-                )
-                * 100,
-                2,
-            )
-            if total_claims
-            else 0.0
+        evidence_coverage_rate = (
+            round((strong + moderate) / total_claims * 100, 2)
+            if total_claims else 0.0
         )
 
         return {
             "total_claims": total_claims,
-            "supported_claims": supported,
+            "supported_claims": strong + moderate,
+            "strong": strong,
+            "moderate": moderate,
+            "weak": weak,
             "weak_claims": weak,
-            "unsupported_claims": unsupported,
-            "support_rate": support_rate,
+            "unsupported_claims": insufficient,
+            "support_rate": evidence_coverage_rate,
+            "evidence_coverage_rate": evidence_coverage_rate,
+            "metric_note": (
+                "Evidence coverage is based on keyword relevance "
+                "between claims and source passages. It does not "
+                "establish that claims are independently verified."
+            ),
         }
 
     # ------------------------------------------------------------------
