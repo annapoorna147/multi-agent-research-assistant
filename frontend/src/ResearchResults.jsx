@@ -54,7 +54,7 @@ function ResearchResults({ result }) {
         </div>
 
         <div className="result-stat">
-          <span>SUPPORTED</span>
+          <span>EVIDENCE COVERED</span>
           <strong>{evidenceSummary.supported_claims ?? 0}</strong>
         </div>
 
@@ -156,14 +156,15 @@ function ResearchResults({ result }) {
             <h3>Evidence Intelligence</h3>
 
             <p>
-              Claims were mapped against supporting research evidence.
+              Claims are matched to relevant source passages. Evidence coverage
+              measures keyword relevance, not independent factual verification.
             </p>
           </div>
         </div>
 
         <div className="evidence-summary">
           <div>
-            <span>Support rate</span>
+            <span>Evidence coverage</span>
             <strong>
               {evidenceSummary.support_rate != null
                 ? `${evidenceSummary.support_rate}%`
@@ -183,7 +184,7 @@ function ResearchResults({ result }) {
 
           <div>
             <span>Unsupported</span>
-            <strong>{evidenceSummary.unsupported ?? 0}</strong>
+            <strong>{evidenceSummary.unsupported_claims ?? 0}</strong>
           </div>
         </div>
       </section>
