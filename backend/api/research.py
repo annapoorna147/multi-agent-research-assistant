@@ -100,6 +100,8 @@ def start_research(
         )
 
     except Exception as error:
+        import logging
+        logging.exception("Research pipeline failed")
         status_code = get_error_status(error)
 
         if status_code == 503:
