@@ -1,228 +1,260 @@
-import { useState } from "react";
-import "./App.css";
-import Workspace from "./Workspace";
+
+import { useEffect, useState } from 'react'
+import './App.css'
+
+const modes = ['Quick', 'Standard', 'Deep']
 
 function App() {
-  const [showWorkspace, setShowWorkspace] = useState(false);
+  const [question, setQuestion] = useState('')
+  const [mode, setMode] = useState('Standard')
+  const [apiStatus, setApiStatus] = useState('checking')
+  const [loading, setLoading] = useState(false)
+  const [result, setResult] = useState(null)
+  const [error, setError] = useState('')
 
-  if (showWorkspace) {
-    return <Workspace />;
+  useEffect(() => {
+    const controller = new AbortController()
+
+    async function checkBackend() {
+      try {
+        const response = await fetch('/api/health', {
+          signal: controller.signal,
+        })
+
+        if (!response.ok) {
+          throw new Error('Backend health check failed')
+        }
+
+        const data = await response.json()
+        setApiStatus(data.status === 'healthy' ? 'connected' : 'offline')
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          setApiStatus('offline')
+        }
+      }
+    }
+
+    checkBackend()
+    return () => controller.abort()
+  }, [])
+
+  async function handleSubmit(event) {
+    event.preventDefault()
+
+    const trimmedQuestion = question.trim()
+    if (!trimmedQuestion || loading) return
+
+    setLoading(true)
+    setError('')
+    setResult(null)
+
+    try {
+      const response = await fetch('/api/research/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          question: trimmedQuestion,
+          mode,
+        }),
+      })
+
+      const data = await response.json().catch(() => ({}))
+
+      if (!response.ok) {
+        throw new Error(
+          data.detail || `Research request failed (${response.status}).`
+        )
+      }
+
+      setResult(data)
+    } catch (err) {
+      setError(
+        err.message ||
+          'Could not complete the request. Check that the backend is running.'
+      )
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
-    <div className="app">
-      <nav className="navbar">
-        <div className="brand">
-          <div className="brand-mark">R</div>
+    <main className="app-shell">
+      <header className="topbar">
+        <a className="brand" href="/" aria-label="Research AI home">
+          <span className="brand-icon">R</span>
           <span>Research AI</span>
+        </a>
+
+        <div className={`connection ${apiStatus}`}>
+          <span className="status-dot" />
+          {apiStatus === 'checking'
+            ? 'Checking backend…'
+            : apiStatus === 'connected'
+              ? 'Backend connected'
+              : 'Backend unavailable'}
         </div>
+      </header>
 
-        <div className="nav-links">
-          <a href="#features">Features</a>
-          <a href="#agents">Agents</a>
-          <a href="#about">About</a>
-        </div>
+      <section className="hero">
+        <div className="eyebrow">YOUR RESEARCH WORKSPACE</div>
 
-        <button
-          className="nav-button"
-          onClick={() => setShowWorkspace(true)}
-        >
-          Open Workspace
-        </button>
-      </nav>
+        <h1>
+          Research smarter.
+          <br />
+          <span>Think deeper.</span>
+        </h1>
 
-      <main>
-        <section className="hero">
-          <div className="hero-badge">
-            <span className="status-dot" />
-            Multi-Agent Intelligence
-          </div>
+        <p className="subtitle">
+          Turn research questions into structured research briefs.
+          Explore a topic, organize key questions, and identify what
+          needs evidence and verification.
+        </p>
 
-          <h1>
-            Research smarter.
-            <br />
-            <span>Discover deeper.</span>
-          </h1>
+        <form className="research-panel" onSubmit={handleSubmit}>
+          <label htmlFor="research-question">
+            What would you like to research?
+          </label>
 
-          <p className="hero-text">
-            An AI-powered research platform that searches the web,
-            verifies information, analyzes sources, and builds
-            evidence-backed reports using specialized AI agents.
-          </p>
+          <textarea
+            id="research-question"
+            value={question}
+            onChange={(event) => setQuestion(event.target.value)}
+            placeholder="For example: What are the applications of AI in wireless communication?"
+            rows={4}
+            required
+            disabled={loading}
+          />
 
-          <div className="research-box">
-            <textarea
-              placeholder="What would you like to research?"
-              rows="3"
-            />
-
-            <div className="research-controls">
-              <div className="mode-buttons">
-                <button className="mode active">Quick</button>
-                <button className="mode">Standard</button>
-                <button className="mode">Deep</button>
-              </div>
-
-              <button
-                className="start-button"
-                onClick={() => setShowWorkspace(true)}
-              >
-                Start Research
-                <span>→</span>
-              </button>
+          <div className="panel-footer">
+            <div className="mode-selector" aria-label="Research depth">
+              {modes.map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  className={mode === item ? 'mode active' : 'mode'}
+                  aria-pressed={mode === item}
+                  onClick={() => setMode(item)}
+                  disabled={loading}
+                >
+                  {item}
+                </button>
+              ))}
             </div>
+
+            <button
+              className="start-button"
+              type="submit"
+              disabled={!question.trim() || loading || apiStatus !== 'connected'}
+            >
+              {loading ? 'Preparing…' : 'Start Research'}
+              {!loading && <span aria-hidden="true"> →</span>}
+            </button>
           </div>
 
-          <div className="hero-note">
-            Search · Verify · Analyze · Synthesize
-          </div>
-        </section>
+          <p className="form-note">
+            {apiStatus !== 'connected'
+              ? 'Waiting for the backend connection.'
+              : 'This initial version creates a research brief, not a verified web research report.'}
+          </p>
+        </form>
 
-        <section className="stats">
-          <div>
-            <strong>6+</strong>
-            <span>AI Agents</span>
-          </div>
+        {loading && (
+          <section className="result-panel" aria-live="polite">
+            <h2>Preparing your research brief…</h2>
+            <p>Please wait while the backend processes your question.</p>
+          </section>
+        )}
 
-          <div>
-            <strong>Multi-source</strong>
-            <span>Research</span>
-          </div>
+        {error && (
+          <section className="result-panel error-panel" role="alert">
+            <h2>Research request failed</h2>
+            <p>{error}</p>
+          </section>
+        )}
 
-          <div>
-            <strong>Evidence</strong>
-            <span>Based Reports</span>
-          </div>
-
-          <div>
-            <strong>Real-time</strong>
-            <span>Web Discovery</span>
-          </div>
-        </section>
-
-        <section id="features" className="section">
-          <div className="section-heading">
-            <span>CAPABILITIES</span>
-
-            <h2>Research built like a team.</h2>
+        {result && (
+          <section className="result-panel" aria-live="polite">
+            <div className="eyebrow">RESEARCH BRIEF</div>
+            <h2>{result.title || 'Your research brief'}</h2>
 
             <p>
-              Instead of relying on a single AI response, Research AI
-              divides complex research into specialized tasks.
+              <strong>Question:</strong> {result.question || question}
             </p>
-          </div>
-
-          <div className="feature-grid">
-            <article className="feature-card">
-              <div className="feature-icon">⌕</div>
-              <h3>Web Discovery</h3>
-              <p>
-                Find relevant sources across the web and build a
-                research collection around your question.
-              </p>
-            </article>
-
-            <article className="feature-card">
-              <div className="feature-icon">✓</div>
-              <h3>Fact Checking</h3>
-              <p>
-                Evaluate claims against collected sources instead
-                of blindly trusting generated information.
-              </p>
-            </article>
-
-            <article className="feature-card">
-              <div className="feature-icon">◈</div>
-              <h3>Cross-Source Analysis</h3>
-              <p>
-                Compare evidence, identify patterns, and surface
-                agreements and contradictions between sources.
-              </p>
-            </article>
-
-            <article className="feature-card">
-              <div className="feature-icon">✦</div>
-              <h3>AI Synthesis</h3>
-              <p>
-                Turn the research process into a structured report
-                that is easier to understand and use.
-              </p>
-            </article>
-          </div>
-        </section>
-
-        <section id="agents" className="section agents-section">
-          <div className="section-heading">
-            <span>THE RESEARCH ENGINE</span>
-
-            <h2>A team of specialized agents.</h2>
 
             <p>
-              Each agent has a focused responsibility. Together
-              they create a deeper research workflow.
+              <strong>Mode:</strong> {result.mode || mode}
             </p>
-          </div>
 
-          <div className="agent-flow">
-            <div className="agent-card">
-              <span>01</span>
-              <strong>Researcher</strong>
-              <small>Finds information</small>
-            </div>
+            {result.summary && (
+              <>
+                <h3>Overview</h3>
+                <p>{result.summary}</p>
+              </>
+            )}
 
-            <div className="flow-arrow">→</div>
+            {Array.isArray(result.key_questions) &&
+              result.key_questions.length > 0 && (
+                <>
+                  <h3>Questions to investigate</h3>
+                  <ol>
+                    {result.key_questions.map((item, index) => (
+                      <li key={index}>{item}</li>
+                    ))}
+                  </ol>
+                </>
+              )}
 
-            <div className="agent-card">
-              <span>02</span>
-              <strong>Fact Checker</strong>
-              <small>Verifies claims</small>
-            </div>
+            {Array.isArray(result.next_steps) &&
+              result.next_steps.length > 0 && (
+                <>
+                  <h3>Next steps</h3>
+                  <ol>
+                    {result.next_steps.map((item, index) => (
+                      <li key={index}>{item}</li>
+                    ))}
+                  </ol>
+                </>
+              )}
 
-            <div className="flow-arrow">→</div>
+            <p className="form-note">
+              {result.notice ||
+                'This is a planning brief. Its points have not been independently verified.'}
+            </p>
+          </section>
+        )}
 
-            <div className="agent-card">
-              <span>03</span>
-              <strong>Analyst</strong>
-              <small>Connects evidence</small>
-            </div>
-
-            <div className="flow-arrow">→</div>
-
-            <div className="agent-card">
-              <span>04</span>
-              <strong>Synthesizer</strong>
-              <small>Builds the report</small>
-            </div>
-          </div>
-        </section>
-
-        <section id="about" className="about-section">
+        <div className="workflow">
           <div>
-            <span className="section-label">BUILT WITH PURPOSE</span>
-
-            <h2>Research should feel intelligent.</h2>
+            <span>01</span>
+            <strong>Discover</strong>
+            <small>Identify research questions</small>
           </div>
-
-          <p>
-            Research AI is being built as a full research workspace
-            where discovery, verification, analysis, and synthesis
-            work together in one system.
-          </p>
-        </section>
-      </main>
+          <div>
+            <span>02</span>
+            <strong>Verify</strong>
+            <small>Find supporting evidence</small>
+          </div>
+          <div>
+            <span>03</span>
+            <strong>Analyze</strong>
+            <small>Compare findings</small>
+          </div>
+          <div>
+            <span>04</span>
+            <strong>Synthesize</strong>
+            <small>Build a report</small>
+          </div>
+        </div>
+      </section>
 
       <footer>
-        <div>
-          <strong>Research AI</strong>
-          <span>Multi-Agent Research Assistant V2</span>
-        </div>
-
-        <div>
-          <strong>Created & Developed by Annapoorna S U</strong>
-        </div>
+        <span>Research AI</span>
+        <span>Building reliable research, one step at a time.</span>
       </footer>
-    </div>
-  );
+    </main>
+  )
 }
 
-export default App;
+export default App
