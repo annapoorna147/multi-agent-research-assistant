@@ -4,7 +4,7 @@ import "./Workspace.css";
 import ResearchResults from "./ResearchResults";
 
 const API_BASE_URL = (
-  import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000"
+  import.meta.env.VITE_API_BASE_URL || ""
 ).replace(/\/+$/, "");
 
 function Workspace() {
@@ -64,23 +64,33 @@ function Workspace() {
     setError("");
 
     try {
-      const response = await fetch(
-        `${API_BASE_URL}/api/research/`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            question: trimmedQuestion,
-            mode,
-          }),
-        }
-      );
+      const response = await fetch(`${API_BASE_URL}/api/research/`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          question: trimmedQuestion,
+          mode,
+        }),
+      });
 
       const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
+        if (response.status === 429) {
+          throw new Error(
+            "Gemini's API quota or rate limit has been reached. " +
+              "Check your Google AI Studio usage and rate limits before trying again."
+          );
+        }
+
+        if (response.status === 503) {
+          throw new Error(
+            "The AI service is temporarily unavailable. Please try again later."
+          );
+        }
+
         throw new Error(
           data.detail ||
             data.error ||
