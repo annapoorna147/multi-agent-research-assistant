@@ -172,26 +172,74 @@ Do not claim that every claim has been independently fact-checked.
 """
 
     client = get_gemini_client()
+    grounded = True
+    fallback_notice = None
 
-    response = client.models.generate_content(
-        model=os.getenv("GEMINI_MODEL", "gemini-3.8-flash"),
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            tools=[types.Tool(google_search=types.GoogleSearch())],
-            temperature=0.3,
-        ),
-    )
+    try:
+        response = client.models.generate_content(
+            model=os.getenv("GEMINI_MODEL", "gemini-3.8-flash"),
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                tools=[types.Tool(google_search=types.GoogleSearch())],
+                temperature=0.3,
+            ),
+        )
+    except Exception as exc:
+        print(
+            f"Grounded Gemini request failed: "
+            f"{type(exc).__name__}: {exc}",
+            flush=True,
+        )
+        error_text = str(exc).lower()
+        is_quota_error = (
+            "429" in error_text
+            or "resource_exhausted" in error_text
+            or "quota" in error_text
+        )
+
+        if not is_quota_error:
+            raise
+
+        fallback_model = os.getenv(
+            "GEMINI_FALLBACK_MODEL", "gemini-3.5-flash"
+        )
+        fallback_prompt = prompt.replace(
+            "Use Google Search to investigate",
+            "Use your existing knowledge to investigate"
+        )
+        fallback_prompt += """
+IMPORTANT: You do not have web-search access for this response.
+Do not invent citations, URLs, or claims of current verification.
+State relevant knowledge limitations clearly.
+"""
+
+        response = client.models.generate_content(
+            model=fallback_model,
+            contents=fallback_prompt,
+            config=types.GenerateContentConfig(temperature=0.3),
+        )
+        grounded = False
+        fallback_notice = (
+            "Google Search grounding was unavailable because of a quota "
+            "error. This report was generated without web grounding. "
+            "Its claims and sources have not been independently verified."
+        )
 
     report = response.text
     if not report:
         raise ValueError("Gemini returned an empty response.")
 
     sources, supports, chunk_to_source = extract_grounding(response)
-    report = add_inline_citations(
-        report, supports, chunk_to_source, sources
-    )
 
-    grounded = bool(sources)
+    if grounded:
+        report = add_inline_citations(
+            report, supports, chunk_to_source, sources
+        )
+    else:
+        # Never display grounding sources or citations for an ungrounded report.
+        sources = []
+
+    grounded = grounded and bool(sources)
 
     result = {
         "final_report": report,
@@ -200,11 +248,21 @@ Do not claim that every claim has been independently fact-checked.
             "The report was generated using Gemini with Google Search "
             "grounding. Review the cited source pages directly before "
             "relying on important claims."
+            if grounded
+            else (
+                "The report was generated without verified web sources. "
+                "Check important claims against reliable sources."
+            )
         ),
         "fact_checking": (
             "Google Search grounding supplied the sources shown above. "
             "This does not constitute an independent, claim-by-claim "
             "fact-check."
+            if grounded
+            else (
+                "No independent fact-check was performed. The report "
+                "was not grounded in Google Search results."
+            )
         ),
         "evidence": {
             "summary": {
@@ -224,11 +282,15 @@ Do not claim that every claim has been independently fact-checked.
             }
         },
         "notice": (
-            "Google Search grounding returned sources."
-            if grounded
+            fallback_notice
+            if fallback_notice
             else (
-                "No grounding sources were returned for this response. "
-                "Treat the report as unverified and retry if needed."
+                "Google Search grounding returned sources."
+                if grounded
+                else (
+                    "No grounding sources were returned for this response. "
+                    "Treat the report as unverified and retry if needed."
+                )
             )
         ),
     }

@@ -63,6 +63,8 @@ export default function ResearchResults({ result }) {
     evidenceSummary.evidence_coverage_rate ?? evidenceSummary.support_rate;
   const factChecking = readable(data.fact_checking);
   const analysis = readable(data.analysis);
+  const notice = data.notice || result.notice;
+  const hasSources = sources.length > 0;
 
   return (
     <section className="research-results" aria-label="Research results">
@@ -88,6 +90,24 @@ export default function ResearchResults({ result }) {
         <h3>{result.question || "Research question unavailable"}</h3>
       </div>
 
+      {notice && (
+        <aside
+          role="status"
+          aria-live="polite"
+          style={{
+            margin: "1rem 0",
+            padding: "1rem",
+            border: "1px solid var(--border-color, #d97706)",
+            borderRadius: "12px",
+            background: "var(--notice-background, rgba(217, 119, 6, 0.08))",
+            lineHeight: 1.6,
+          }}
+        >
+          <strong>Research limitations</strong>
+          <p style={{ margin: "0.4rem 0 0" }}>{notice}</p>
+        </aside>
+      )}
+
       <div className="results-overview">
         <MetricCard
           label="Sources selected"
@@ -97,7 +117,7 @@ export default function ResearchResults({ result }) {
         />
         <MetricCard
           label="Claims analyzed"
-          value={evidenceSummary.total_claims ?? 0}
+          value={evidenceSummary.total_claims ?? (hasSources ? 0 : "—")}
           detail="Claims assessed"
           icon="◎"
         />
@@ -109,8 +129,8 @@ export default function ResearchResults({ result }) {
         />
         <MetricCard
           label="Contradictions"
-          value={contradictionSummary.contradictions ?? 0}
-          detail={`${contradictionSummary.uncertainties ?? 0} uncertainties`}
+          value={contradictionSummary.contradictions ?? (hasSources ? 0 : "—")}
+          detail={`${contradictionSummary.uncertainties ?? (hasSources ? 0 : "—")} uncertainties`}
           icon="⚖"
         />
       </div>
@@ -184,9 +204,9 @@ export default function ResearchResults({ result }) {
         />
         <div className="evidence-summary">
           <div><span>Evidence coverage</span><strong>{coverage != null ? `${coverage}%` : "—"}</strong></div>
-          <div><span>Strong evidence</span><strong>{evidenceSummary.strong ?? 0}</strong></div>
-          <div><span>Weak evidence</span><strong>{evidenceSummary.weak ?? 0}</strong></div>
-          <div><span>Unsupported claims</span><strong>{evidenceSummary.unsupported_claims ?? 0}</strong></div>
+          <div><span>Strong evidence</span><strong>{evidenceSummary.strong ?? (hasSources ? 0 : "—")}</strong></div>
+          <div><span>Weak evidence</span><strong>{evidenceSummary.weak ?? (hasSources ? 0 : "—")}</strong></div>
+          <div><span>Unsupported claims</span><strong>{evidenceSummary.unsupported_claims ?? (hasSources ? 0 : "—")}</strong></div>
         </div>
       </section>
 
